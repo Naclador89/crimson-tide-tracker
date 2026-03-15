@@ -655,23 +655,25 @@ function calcAvgPeriod(cycles) {
 // ══════════════════════════════════════════════════════════
 const PMS_DAYS = 5;
 
-// Single unified prediction function used everywhere.
-// Returns predicted cycle entries (not real recorded ones) in both directions
-// from the last recorded cycle, covering at least `minMonthsAhead` months forward
-// and enough backward to cover `monthYear/monthMonth` if provided.
+// buildAllPhases(monthYear?, monthMonth?)
+// Returns phase entries used for calendar/timeline colouring.
+// Combines two sources:
+//   1. REAL phases — PMS/ovulation/hellDay derived from every actual
+//      recorded cycle start date (these phases always happened).
+//   2. PREDICTED phases — extrapolated forward and backward from the
+//      last recorded cycle for gaps where no data exists.
+// Real phases always take priority over predicted ones in classifyDay().
 function buildAllPhases(monthYear, monthMonth) {
   const cycles = sortedCycles();
   if (!cycles.length) return [];
 
-  const avgCycle = calcAvgCycle(cycles);
+  const avgCycle  = calcAvgCycle(cycles);
   const avgPeriod = calcAvgPeriod(cycles);
 
-  // Always cover at least 18 months forward from today
+  // Window bounds
   const now = parseDate(today());
   const defaultWinEnd = dateStr(new Date(now.getFullYear(), now.getMonth() + 18, 0));
-
-  // If a specific month is requested, extend window to cover it (+/- buffer)
-  let winStart = dateStr(new Date(now.getFullYear(), now.getMonth() - 3, 1));
+  let winStart = dateStr(new Date(now.getFullYear(), now.getMonth() - 18, 1));
   let winEnd   = defaultWinEnd;
   if (monthYear !== undefined) {
     const ms = dateStr(new Date(monthYear, monthMonth - 1, 1));
@@ -680,11 +682,9 @@ function buildAllPhases(monthYear, monthMonth) {
     if (me > winEnd)   winEnd   = me;
   }
 
-  const anchor = parseDate(cycles[cycles.length - 1].start);
-
-  const makeEntry = (d) => ({
+  const makeEntry = (d, avgPer) => ({
     start:     dateStr(d),
-    end:       dateStr(addDays(d, avgPeriod - 1)),
+    end:       dateStr(addDays(d, avgPer - 1)),
     pmsStart:  dateStr(addDays(d, -PMS_DAYS)),
     hellDay:   dateStr(addDays(d, -7)),
     ovulation: dateStr(addDays(d, -14)),
@@ -692,19 +692,33 @@ function buildAllPhases(monthYear, monthMonth) {
 
   const all = [];
 
-  // Forward: first predicted cycle starts anchor + avgCycle
+  // ── 1. REAL phases from every recorded cycle ──
+  // Each real start date gets its own PMS/ovulation/hellDay window.
+  // Use the actual period duration where known, else avgPeriod.
+  for (const c of cycles) {
+    const dur = c.end ? diffDays(c.start, c.end) + 1 : avgPeriod;
+    all.push(makeEntry(parseDate(c.start), dur));
+  }
+
+  // ── 2. PREDICTED phases to fill gaps and extend into the future ──
+  const anchor = parseDate(cycles[cycles.length - 1].start);
+  const realStarts = new Set(cycles.map(c => c.start));
+
+  // Forward from last real cycle
   let fwd = addDays(anchor, avgCycle);
   for (let i = 0; i < 60; i++) {
-    if (dateStr(fwd) > winEnd) break;
-    all.push(makeEntry(fwd));
+    const ds = dateStr(fwd);
+    if (ds > winEnd) break;
+    if (!realStarts.has(ds)) all.push(makeEntry(fwd, avgPeriod));
     fwd = addDays(fwd, avgCycle);
   }
 
-  // Backward: first step back from anchor (anchor itself is a real cycle, not predicted)
-  let bwd = addDays(anchor, -avgCycle);
+  // Backward to fill gaps before oldest real cycle
+  let bwd = addDays(parseDate(cycles[0].start), -avgCycle);
   for (let i = 0; i < 60; i++) {
-    if (dateStr(bwd) < winStart) break;
-    all.push(makeEntry(bwd));
+    const ds = dateStr(bwd);
+    if (ds < winStart) break;
+    if (!realStarts.has(ds)) all.push(makeEntry(bwd, avgPeriod));
     bwd = addDays(bwd, -avgCycle);
   }
 
