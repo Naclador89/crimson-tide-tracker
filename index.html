@@ -1681,6 +1681,7 @@ function saveModal() {
   save();
   closeModal();
   renderAll();
+  scheduleNotifications();
   showToast(editingId ? '✅ Zyklus aktualisiert' : '✅ Zyklus eingetragen');
 }
 
@@ -1864,6 +1865,80 @@ function renderAll() {
 }
 
 // ══════════════════════════════════════════════════════════
+// NOTIFICATIONS
+//
+// scheduleNotifications()
+//   Calculates the next predicted period start and sends a
+//   SCHEDULE_PERIOD_ALARM message to the Service Worker to fire
+//   a notification at noon (12:00) 3 days before the period.
+//   Rescheduled every time a cycle is saved.
+//
+// requestNotificationPermission()
+//   Asks for permission once with a friendly toast prompt.
+//   Calls scheduleNotifications() if permission is granted.
+// ══════════════════════════════════════════════════════════
+const PERIOD_WARNINGS = [
+  "🔴 The ocean remembers. The crimson tide returns in 3 days. Respect the swell.",
+];
+
+function scheduleNotifications() {
+  if (!('Notification' in window) || !navigator.serviceWorker) return;
+  if (Notification.permission !== 'granted') return;
+
+  const cycles = sortedCycles();
+  if (!cycles.length) return;
+
+  const allPhases = buildAllPhases();
+  const t = today();
+  const nextPeriod = allPhases
+    .filter(p => p.start > t)
+    .sort((a, b) => a.start > b.start ? 1 : -1)[0];
+  if (!nextPeriod) return;
+
+  // Alarm = 3 days before predicted start, at 12:00 local time
+  const alarmDate = new Date(nextPeriod.start + 'T00:00:00');
+  alarmDate.setDate(alarmDate.getDate() - 3);
+  alarmDate.setHours(12, 0, 0, 0);
+
+  if (alarmDate <= new Date()) return;
+
+  const message = PERIOD_WARNINGS[Math.floor(Math.random() * PERIOD_WARNINGS.length)];
+  const icon    = document.querySelector('link[rel="apple-touch-icon"]')?.href || '';
+
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg.active) {
+      reg.active.postMessage({
+        type:   'SCHEDULE_PERIOD_ALARM',
+        fireAt: alarmDate.getTime(),
+        message,
+        icon,
+      });
+    }
+  });
+}
+
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    scheduleNotifications();
+    return;
+  }
+  if (Notification.permission === 'denied') return;
+  // Friendly toast before the system prompt
+  setTimeout(() => {
+    showToast('🔔 Benachrichtigungen erlauben für Perioden-Warnungen?');
+    setTimeout(() => {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          scheduleNotifications();
+          showToast('\u2705 Benachrichtigungen aktiviert 🤙');
+        }
+      });
+    }, 3000);
+  }, 2000);
+}
+
+// ══════════════════════════════════════════════════════════
 // INITIALISATION
 // 1. load()      — restore state from localStorage
 // 2. Event listeners for modal overlays (close on backdrop click)
@@ -1886,6 +1961,11 @@ document.getElementById('modal-overlay').addEventListener('keydown', function(e)
 });
 renderAll();
 window.addEventListener('resize', () => { renderStats(); drawHormones(); drawTimeline(); });
+
+// Request permission and schedule notification after SW is ready
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.ready.then(() => requestNotificationPermission());
+}
 </script>
 
 <script>
@@ -1973,9 +2053,34 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Listen for skip-waiting message from client
+// Listen for messages from client
 self.addEventListener('message', e => {
-  if (e.data === 'SKIP_WAITING') self.skipWaiting();
+  if (e.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+  // Schedule a period warning notification at a specific timestamp
+  if (e.data && e.data.type === 'SCHEDULE_PERIOD_ALARM') {
+    const { fireAt, message } = e.data;
+    const delay = fireAt - Date.now();
+    if (delay < 0) return; // already past
+    setTimeout(() => {
+      self.registration.showNotification('🏄\u200d♀️ Crimson Tide Tracker', {
+        body: message,
+        icon: e.data.icon || '',
+        badge: e.data.icon || '',
+        tag: 'period-warning',       // replaces previous warning if rescheduled
+        renotify: false,
+        requireInteraction: false,
+      });
+    }, Math.min(delay, 2147483647)); // clamp to max setTimeout value (~24.8 days)
+  }
+});
+
+// Show notification when SW receives a push (future use)
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.openWindow('./'));
 });
 `;
 
