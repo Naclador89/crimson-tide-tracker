@@ -589,6 +589,40 @@ function sortedCycles() {
 }
 
 // ══════════════════════════════════════════════════════════
+// CYCLE AVERAGES
+//
+// calcAvgCycle(cycles)
+//   Calculates average cycle length using ONLY consecutive cycle pairs
+//   whose gap is between 15 and 60 days (plausible single-cycle distance).
+//   Gaps outside this range indicate a skipped month and are excluded.
+//   Falls back to 28 days if no valid pairs exist.
+//
+// calcAvgPeriod(cycles)
+//   Calculates average period duration from cycles that have an end date.
+//   Falls back to 5 days.
+// ══════════════════════════════════════════════════════════
+const MIN_CYCLE = 15;  // shortest plausible cycle (days)
+const MAX_CYCLE = 60;  // longest plausible single cycle (days)
+                       // gaps > MAX_CYCLE = skipped month → excluded
+
+function calcAvgCycle(cycles) {
+  if (cycles.length < 2) return 28;
+  const validGaps = [];
+  for (let i = 1; i < cycles.length; i++) {
+    const gap = diffDays(cycles[i-1].start, cycles[i].start);
+    if (gap >= MIN_CYCLE && gap <= MAX_CYCLE) validGaps.push(gap);
+  }
+  if (!validGaps.length) return 28;
+  return Math.round(validGaps.reduce((a, b) => a + b, 0) / validGaps.length);
+}
+
+function calcAvgPeriod(cycles) {
+  const durs = cycles.filter(c => c.end).map(c => diffDays(c.start, c.end) + 1);
+  if (!durs.length) return 5;
+  return Math.round(durs.reduce((a, b) => a + b, 0) / durs.length);
+}
+
+// ══════════════════════════════════════════════════════════
 // PREDICTION ENGINE
 //
 // PMS_DAYS — how many days before the predicted period start PMS begins.
@@ -629,15 +663,8 @@ function buildAllPhases(monthYear, monthMonth) {
   const cycles = sortedCycles();
   if (!cycles.length) return [];
 
-  let avgCycle = 28;
-  if (cycles.length >= 2) {
-    const gaps = [];
-    for (let i=1;i<cycles.length;i++) gaps.push(diffDays(cycles[i-1].start, cycles[i].start));
-    avgCycle = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);
-  }
-  let avgPeriod = 5;
-  const durs = cycles.filter(c=>c.end).map(c=>diffDays(c.start,c.end)+1);
-  if (durs.length) avgPeriod = Math.round(durs.reduce((a,b)=>a+b,0)/durs.length);
+  const avgCycle = calcAvgCycle(cycles);
+  const avgPeriod = calcAvgPeriod(cycles);
 
   // Always cover at least 18 months forward from today
   const now = parseDate(today());
@@ -806,12 +833,7 @@ function drawHormones() {
 
   // ── Same window as timeline ──
   const cycles = sortedCycles();
-  let avgCycle = 28;
-  if (cycles.length >= 2) {
-    const gaps = [];
-    for (let i=1;i<cycles.length;i++) gaps.push(diffDays(cycles[i-1].start, cycles[i].start));
-    avgCycle = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);
-  }
+  const avgCycle = calcAvgCycle(cycles);
   const halfSpan  = Math.floor(avgCycle / 2);
   const totalDays = halfSpan * 2 + 1;
   const t         = today();
@@ -1071,15 +1093,9 @@ function drawTimeline() {
   const cycles  = sortedCycles();
   const t       = today();
 
-  // ── Determine avg cycle & period length ──
-  let avgCycle = 28, avgPeriod = 5;
-  if (cycles.length >= 2) {
-    const gaps = [];
-    for (let i=1;i<cycles.length;i++) gaps.push(diffDays(cycles[i-1].start, cycles[i].start));
-    avgCycle = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);
-  }
-  const durs = cycles.filter(c=>c.end).map(c=>diffDays(c.start,c.end)+1);
-  if (durs.length) avgPeriod = Math.round(durs.reduce((a,b)=>a+b,0)/durs.length);
+  // ── Determine avg cycle & period length (consecutive pairs only) ──
+  const avgCycle = calcAvgCycle(cycles);
+  const avgPeriod = calcAvgPeriod(cycles);
 
   // ── Window: show exactly one cycle centred on today ──
   const halfSpan = Math.floor(avgCycle / 2);
@@ -1271,15 +1287,9 @@ function renderCalendar() {
   const allPhases = buildAllPhases(year, month);
   const cycles = sortedCycles();
   const t = today();
-  // Compute avg cycle & period for classifier fallback
-  let avgCycle = 28, avgPeriod = 5;
-  if (cycles.length >= 2) {
-    const gaps = [];
-    for (let i=1;i<cycles.length;i++) gaps.push(diffDays(cycles[i-1].start, cycles[i].start));
-    avgCycle = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);
-  }
-  const durs = cycles.filter(c=>c.end).map(c=>diffDays(c.start,c.end)+1);
-  if (durs.length) avgPeriod = Math.round(durs.reduce((a,b)=>a+b,0)/durs.length);
+  // Compute avg cycle & period for classifier fallback (consecutive pairs only)
+  const avgCycle = calcAvgCycle(cycles);
+  const avgPeriod = calcAvgPeriod(cycles);
 
   // CSS class per classification key
   const calClass = {
@@ -1541,8 +1551,12 @@ function renderStats() {
     return;
   }
 
+  // Only consecutive gaps within plausible range (skipped months excluded)
   const lengths = [];
-  for (let i=1;i<cycles.length;i++) lengths.push(diffDays(cycles[i-1].start, cycles[i].start));
+  for (let i=1;i<cycles.length;i++) {
+    const gap = diffDays(cycles[i-1].start, cycles[i].start);
+    if (gap >= MIN_CYCLE && gap <= MAX_CYCLE) lengths.push(gap);
+  }
   const durations = cycles.filter(c=>c.end).map(c=>diffDays(c.start,c.end)+1);
 
   // Last recorded values for the red marker
@@ -1597,9 +1611,7 @@ function showTab(name, el) {
 // closeModal()       — dismisses the modal without saving.
 // ══════════════════════════════════════════════════════════
 function avgPeriodLength() {
-  const durs = sortedCycles().filter(c=>c.end).map(c=>diffDays(c.start,c.end)+1);
-  if (durs.length) return Math.round(durs.reduce((a,b)=>a+b,0)/durs.length);
-  return 5; // default
+  return calcAvgPeriod(sortedCycles());
 }
 
 function autoFillEndDate() {
