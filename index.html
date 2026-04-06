@@ -466,6 +466,23 @@
   <!-- ══ DATEN ══ -->
   <div id="tab-data" class="section">
     <div class="card">
+      <div class="card-title"><span class="icon">⚙️</span>Einstellungen</div>
+      <div class="form-group" style="max-width:260px;margin-bottom:14px">
+        <label>Vorwarnung vor Periode</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" id="settings-warn-days" min="1" max="14" step="1" value="3" style="width:70px">
+          <span style="font-size:.88rem;color:var(--text-mid)">Tage vorher</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <button class="quick-btn" onclick="saveSettings()" style="margin:0">Speichern</button>
+        <span id="notif-status" style="font-size:.78rem;color:var(--text-light)"></span>
+      </div>
+      <p style="font-size:.78rem;color:var(--text-light);margin-top:12px;line-height:1.5">
+        Benachrichtigungen funktionieren auf <strong>Android</strong> (Chrome, installierte PWA) und auf <strong>iOS 16.4+</strong> nur wenn die App zum Home-Screen hinzugefügt wurde.
+      </p>
+    </div>
+    <div class="card">
       <div class="card-title"><span class="icon">⬇️</span>Daten exportieren</div>
       <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:18px;line-height:1.6">Speichere eine Sicherungskopie aller eingetragenen Zyklen als JSON-Datei auf deinem Gerät.</p>
       <button class="quick-btn" onclick="exportData()" style="margin:0">⬇ Export herunterladen</button>
@@ -532,7 +549,8 @@
 //       end: string|null — ISO date of last period day, null if ongoing }
 // ══════════════════════════════════════════════════════════
 let state = {
-  cycles: []
+  cycles: [],
+  settings: { warnDays: 3 }
 };
 
 let calendarMonth = new Date();
@@ -550,6 +568,9 @@ function save() {
 function load() {
   const d = localStorage.getItem('crimson-tide-tracker');
   if (d) { try { state = JSON.parse(d); } catch(e){} }
+  // Migration: ensure settings object exists for existing users
+  if (!state.settings) state.settings = { warnDays: 3 };
+  if (typeof state.settings.warnDays !== 'number') state.settings.warnDays = 3;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1877,6 +1898,7 @@ function renderAll() {
   renderCalendar();
   renderCyclesList();
   renderStats();
+  renderSettings();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1885,16 +1907,22 @@ function renderAll() {
 // scheduleNotifications()
 //   Calculates the next predicted period start and sends a
 //   SCHEDULE_PERIOD_ALARM message to the Service Worker to fire
-//   a notification at noon (12:00) 3 days before the period.
-//   Rescheduled every time a cycle is saved.
+//   a notification at noon (12:00) N days before the period.
+//   N is configured via state.settings.warnDays (default: 3).
+//   Rescheduled every time a cycle is saved or settings change.
 //
 // requestNotificationPermission()
 //   Asks for permission once with a friendly toast prompt.
 //   Calls scheduleNotifications() if permission is granted.
 // ══════════════════════════════════════════════════════════
-const PERIOD_WARNINGS = [
-  "🔴 The ocean remembers. The crimson tide returns in 3 days. Respect the swell.",
-];
+function periodWarningMessage(days) {
+  const msgs = [
+    `🔴 Die Erinnerung des Meeres: Die Crimson Tide kommt in ${days} ${days === 1 ? 'Tag' : 'Tagen'}. Sei bereit.`,
+    `🌊 In ${days} ${days === 1 ? 'Tag' : 'Tagen'} beginnt deine Periode. Alles vorbereitet?`,
+    `🩸 Noch ${days} ${days === 1 ? 'Tag' : 'Tagen'} bis zur Periode – Zeit, vorbereit zu sein.`,
+  ];
+  return msgs[Math.floor(Math.random() * msgs.length)];
+}
 
 function scheduleNotifications() {
   if (!('Notification' in window) || !navigator.serviceWorker) return;
@@ -1910,14 +1938,15 @@ function scheduleNotifications() {
     .sort((a, b) => a.start > b.start ? 1 : -1)[0];
   if (!nextPeriod) return;
 
-  // Alarm = 3 days before predicted start, at 12:00 local time
+  // Alarm = warnDays before predicted start, at 12:00 local time
+  const warnDays = state.settings.warnDays || 3;
   const alarmDate = new Date(nextPeriod.start + 'T00:00:00');
-  alarmDate.setDate(alarmDate.getDate() - 3);
+  alarmDate.setDate(alarmDate.getDate() - warnDays);
   alarmDate.setHours(12, 0, 0, 0);
 
   if (alarmDate <= new Date()) return;
 
-  const message = PERIOD_WARNINGS[Math.floor(Math.random() * PERIOD_WARNINGS.length)];
+  const message = periodWarningMessage(warnDays);
   const icon    = document.querySelector('link[rel="apple-touch-icon"]')?.href || '';
 
   navigator.serviceWorker.ready.then(reg => {
@@ -1930,6 +1959,42 @@ function scheduleNotifications() {
       });
     }
   });
+}
+
+// ══════════════════════════════════════════════════════════
+// SETTINGS
+// saveSettings() — persists warnDays from UI input, reschedules notification.
+// renderSettings() — syncs UI with current state.settings.
+// ══════════════════════════════════════════════════════════
+function renderSettings() {
+  const inp = document.getElementById('settings-warn-days');
+  if (inp) inp.value = state.settings.warnDays;
+
+  const el = document.getElementById('notif-status');
+  if (!el) return;
+  if (!('Notification' in window)) {
+    el.textContent = '⚠️ Benachrichtigungen werden von diesem Browser nicht unterstützt';
+  } else if (Notification.permission === 'granted') {
+    el.textContent = '✅ Benachrichtigungen aktiv';
+    el.style.color = 'var(--text-light)';
+  } else if (Notification.permission === 'denied') {
+    el.textContent = '🚫 Benachrichtigungen blockiert – bitte in den Browser-Einstellungen erlauben';
+    el.style.color = '#a00e2b';
+  } else {
+    el.textContent = '🔔 Noch keine Berechtigung – Benachrichtigungen aktivieren um Warnungen zu erhalten';
+    el.style.color = 'var(--text-light)';
+  }
+}
+
+function saveSettings() {
+  const inp = document.getElementById('settings-warn-days');
+  const n = parseInt(inp?.value, 10);
+  if (isNaN(n) || n < 1 || n > 14) { showToast('⚠️ Bitte eine Zahl zwischen 1 und 14 eingeben'); return; }
+  state.settings.warnDays = n;
+  save();
+  scheduleNotifications();
+  renderSettings();
+  showToast(`✅ Einstellung gespeichert – Warnung ${n} ${n === 1 ? 'Tag' : 'Tage'} vor Periode`);
 }
 
 function requestNotificationPermission() {
