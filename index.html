@@ -1916,12 +1916,7 @@ function renderAll() {
 //   Calls scheduleNotifications() if permission is granted.
 // ══════════════════════════════════════════════════════════
 function periodWarningMessage(days) {
-  const msgs = [
-    `🔴 Die Erinnerung des Meeres: Die Crimson Tide kommt in ${days} ${days === 1 ? 'Tag' : 'Tagen'}. Sei bereit.`,
-    `🌊 In ${days} ${days === 1 ? 'Tag' : 'Tagen'} beginnt deine Periode. Alles vorbereitet?`,
-    `🩸 Noch ${days} ${days === 1 ? 'Tag' : 'Tagen'} bis zur Periode – Zeit, vorbereit zu sein.`,
-  ];
-  return msgs[Math.floor(Math.random() * msgs.length)];
+  return `🌕 The moon's pulling hard. Die Crimson Tide kommt in ${days} ${days === 1 ? 'Tag' : 'Tagen'}. You can't stop the tide – but you can ride it.`;
 }
 
 function scheduleNotifications() {
