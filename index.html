@@ -2086,10 +2086,14 @@ window.addEventListener('resize', () => { renderStats(); drawHormones(); drawTim
 navigator.storage?.persist?.();
 
 // Show native share button only when Web Share API is available
-if (navigator.share) {
-  const shareBtn = document.getElementById('share-btn');
-  if (shareBtn) shareBtn.style.display = '';
-}
+// Only show share button if file sharing is actually supported (not just navigator.share —
+// desktop Chrome supports navigator.share for URLs but not for files)
+try {
+  const testFile = new File([''], 'test.json', { type: 'application/json' });
+  if (navigator.canShare?.({ files: [testFile] })) {
+    document.getElementById('share-btn').style.display = '';
+  }
+} catch(e) {}
 
 // Handle PWA shortcut actions passed via URL query parameter
 (function() {
