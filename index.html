@@ -82,6 +82,19 @@
     --radius: 16px;
     --radius-sm: 10px;
   }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --cream: #0d1b2e;
+      --warm-white: #162337;
+      --card: #1a2d45;
+      --text: #e8f0ff;
+      --text-mid: #93afd4;
+      --text-light: #5a7aaa;
+      --border: #2a3f5c;
+      --shadow: 0 4px 24px rgba(0,0,0,0.35);
+      --shadow-lg: 0 8px 40px rgba(0,0,0,0.50);
+    }
+  }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -366,6 +379,9 @@
   }
   .toast.show { opacity:1;transform:translateY(0); }
 
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; transform: none !important; }
+  }
 
 </style>
 </head>
@@ -485,7 +501,10 @@
     <div class="card">
       <div class="card-title"><span class="icon">⬇️</span>Daten exportieren</div>
       <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:18px;line-height:1.6">Speichere eine Sicherungskopie aller eingetragenen Zyklen als JSON-Datei auf deinem Gerät.</p>
-      <button class="quick-btn" onclick="exportData()" style="margin:0">⬇ Export herunterladen</button>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <button class="quick-btn" onclick="exportData()" style="margin:0">⬇ Download</button>
+        <button class="quick-btn secondary" id="share-btn" onclick="shareData()" style="margin:0;display:none">🔗 Teilen</button>
+      </div>
     </div>
     <div class="card">
       <div class="card-title"><span class="icon">⬆️</span>Daten importieren</div>
@@ -1263,6 +1282,8 @@ function renderHome() {
     'phase-unknown':    {bg:'#eef2f9', color:'#2e4a72'},
   };
   const pc = phaseColors[phase.color] || phaseColors['phase-unknown'];
+  // Clear badge when period is active — warning is no longer needed
+  if (phase.phase === 'period') navigator.clearAppBadge?.().catch(() => {});
   document.getElementById('home-phase-badge').innerHTML =
     `<span style="display:inline-flex;align-items:center;gap:10px;background:${pc.bg};color:${pc.color};border-radius:50px;padding:8px 18px;font-weight:600;font-size:.9rem">
       ${phase.label} <span style="font-weight:400;font-size:.8rem;opacity:.75">· Tag ${dayNum} im Zyklus</span>
@@ -1399,8 +1420,8 @@ function renderCyclesList() {
         <div class="dates">${fmtDate(c.start)} → ${fmtDate(c.end) || 'offen'}</div>
         <div class="meta">Dauer: ${dur} Tage · Zykluslänge: ${cycleLen === '–' ? '–' : cycleLen+' Tage'}</div>
       </div>
-      <button class="icon-btn" title="Bearbeiten" onclick="openEditModal('${c.id}')">✏️</button>
-      <button class="icon-btn del" title="Löschen" onclick="deleteCycle('${c.id}')">🗑️</button>
+      <button class="icon-btn" title="Bearbeiten" data-edit-id="${c.id}">✏️</button>
+      <button class="icon-btn del" title="Löschen" data-delete-id="${c.id}">🗑️</button>
     </div>`;
   }
   document.getElementById('cycle-list').innerHTML = html;
@@ -1829,6 +1850,21 @@ function exportData() {
   showToast('✅ Daten exportiert');
 }
 
+async function shareData() {
+  const json = JSON.stringify(state, null, 2);
+  const dateStr = new Date().toISOString().split('T')[0];
+  const file = new File([json], `crimson-tide-${dateStr}.json`, { type: 'application/json' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Crimson Tide Tracker', text: 'Meine Zyklus-Daten' });
+    } else {
+      exportData();
+    }
+  } catch(e) {
+    if (e.name !== 'AbortError') exportData();
+  }
+}
+
 // ══════════════════════════════════════════════════════════
 // IMPORT
 // Reads a JSON export file and merges new cycles into state.
@@ -1952,6 +1988,8 @@ function scheduleNotifications() {
         message,
         icon,
       });
+      // Show badge on app icon to signal an upcoming period (desktop + iOS 16.4+ PWA)
+      navigator.setAppBadge?.(1).catch(() => {});
     }
   });
 }
@@ -2026,6 +2064,13 @@ load();
 document.getElementById('confirm-overlay').addEventListener('click', function(e){
   if(e.target===this) closeConfirm();
 });
+// Event delegation for cycle list edit/delete buttons (XSS-safe: no inline onclick)
+document.getElementById('cycle-list').addEventListener('click', function(e) {
+  const editBtn = e.target.closest('[data-edit-id]');
+  const delBtn  = e.target.closest('[data-delete-id]');
+  if (editBtn) openEditModal(editBtn.dataset.editId);
+  if (delBtn)  deleteCycle(delBtn.dataset.deleteId);
+});
 document.getElementById('confirm-ok').addEventListener('click', confirmDelete);
 document.getElementById('modal-overlay').addEventListener('click', function(e){
   if(e.target===this) closeModal();
@@ -2036,6 +2081,22 @@ document.getElementById('modal-overlay').addEventListener('keydown', function(e)
 });
 renderAll();
 window.addEventListener('resize', () => { renderStats(); drawHormones(); drawTimeline(); });
+
+// Request persistent storage to protect health data from browser eviction
+navigator.storage?.persist?.();
+
+// Show native share button only when Web Share API is available
+if (navigator.share) {
+  const shareBtn = document.getElementById('share-btn');
+  if (shareBtn) shareBtn.style.display = '';
+}
+
+// Handle PWA shortcut actions passed via URL query parameter
+(function() {
+  const action = new URLSearchParams(location.search).get('action');
+  if (action === 'quick-start') { quickStart(); history.replaceState(null, '', location.pathname); }
+  if (action === 'add')         { openAddModal(); history.replaceState(null, '', location.pathname); }
+})();
 
 // Request permission and schedule notification after SW is ready
 if ('serviceWorker' in navigator) {
@@ -2065,6 +2126,10 @@ if ('serviceWorker' in navigator) {
     icons: [
       { src: icon192, sizes: '192x192', type: 'image/jpeg', purpose: 'any maskable' },
       { src: icon512, sizes: '512x512', type: 'image/jpeg', purpose: 'any maskable' },
+    ],
+    shortcuts: [
+      { name: 'Periode starten', short_name: 'Start', url: './?action=quick-start', description: 'Periode beginnt heute' },
+      { name: 'Zyklus eintragen', short_name: 'Eintragen', url: './?action=add', description: 'Neuen Zyklus manuell eintragen' }
     ]
   };
 
