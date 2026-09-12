@@ -19,6 +19,7 @@ const CACHE   = 'ctt-v' + VERSION;
 const PRECACHE = [
   './',
   './index.html',
+  './cycle-core.js',
   './manifest.webmanifest',
   './icon-192.jpg',
   './icon-512.jpg',
