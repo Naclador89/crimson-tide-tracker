@@ -81,6 +81,36 @@
     --shadow-lg: 0 8px 40px rgba(15,29,53,0.14);
     --radius: 16px;
     --radius-sm: 10px;
+
+    /* ── Chart palette ──
+       The canvas renderers read these with getComputedStyle: the Canvas API
+       takes plain colour strings, so it cannot use var() directly. Keeping
+       them here anyway means the charts get a dark theme like everything
+       else, instead of painting near-black text on a dark card. */
+    --ph-period:      #e8547a;
+    --ph-pred-period: #fdd0de;
+    --ph-hell:        #c0392b;
+    --ph-pms:         #ffe4b0;
+    --ph-ovulation:   #2ec4b6;
+    --ph-fertile:     #d4f5e0;
+    --ph-follicular:  #e8f6ff;
+    --ph-luteal:      #f0ecff;
+    --ph-unknown:     #ede8f0;
+
+    --chart-ink:    #2d1f2b;
+    --chart-muted:  #b89ab5;
+    --chart-accent: #1a6db5;
+    --chart-ref-fill:   rgba(180,160,175,0.18);
+    --chart-ref-stroke: rgba(160,140,158,0.55);
+
+    --hormone-estrogen:     #dc143c;
+    --hormone-lh:           #5c35c8;
+    --hormone-fsh:          #1a6db5;
+    --hormone-progesterone: #2e8050;
+    --band-follicular: rgba(200,220,255,0.18);
+    --band-luteal:     rgba(212,180,100,0.12);
+    --label-follicular: rgba(92,53,200,0.70);
+    --label-luteal:     rgba(46,125,79,0.70);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -93,6 +123,33 @@
       --border: #2a3f5c;
       --shadow: 0 4px 24px rgba(0,0,0,0.35);
       --shadow-lg: 0 8px 40px rgba(0,0,0,0.50);
+
+      /* Chart palette, dark: pale pastels become deep tints that still read
+         as the same hue against the card, and every ink colour flips. */
+      --ph-period:      #e8547a;
+      --ph-pred-period: #6d2740;
+      --ph-hell:        #d4462f;
+      --ph-pms:         #7a5a1c;
+      --ph-ovulation:   #2ec4b6;
+      --ph-fertile:     #1f5340;
+      --ph-follicular:  #1c3450;
+      --ph-luteal:      #322a55;
+      --ph-unknown:     #24344a;
+
+      --chart-ink:    #e8f0ff;
+      --chart-muted:  #7e97bd;
+      --chart-accent: #5fa8e0;
+      --chart-ref-fill:   rgba(160,180,210,0.14);
+      --chart-ref-stroke: rgba(150,175,210,0.55);
+
+      --hormone-estrogen:     #ff5c7a;
+      --hormone-lh:           #a68cff;
+      --hormone-fsh:          #5fa8e0;
+      --hormone-progesterone: #4fc08a;
+      --band-follicular: rgba(120,160,220,0.14);
+      --band-luteal:     rgba(212,180,100,0.10);
+      --label-follicular: rgba(166,140,255,0.85);
+      --label-luteal:     rgba(79,192,138,0.85);
     }
   }
 
@@ -853,29 +910,31 @@ function buildAllPhases(monthYear, monthMonth) {
 }
 
 
+// Label and badge colour for each classifyDay() key. Predicted and recorded
+// periods share a phase id so callers can test for "period" without caring
+// which of the two it is.
+const PHASE_META = {
+  period:     { phase:'period',     label:'Periode',          color:'phase-period' },
+  predPeriod: { phase:'period',     label:'Voraus. Periode',  color:'phase-period' },
+  hellDay:    { phase:'hellday',    label:'Hell Day',         color:'phase-pms' },
+  pms:        { phase:'pms',        label:'PMS-Phase',        color:'phase-pms' },
+  ovulation:  { phase:'ovulation',  label:'Eisprung',         color:'phase-ovulation' },
+  fertile:    { phase:'fertile',    label:'Fruchtbare Phase', color:'phase-ovulation' },
+  follicular: { phase:'follicular', label:'Follikelphase',    color:'phase-follicular' },
+  luteal:     { phase:'luteal',     label:'Lutealphase',      color:'phase-luteal' },
+  unknown:    { phase:'unknown',    label:'Keine Daten',      color:'phase-unknown' },
+};
+
+// Today's phase for the status badge. Delegates to classifyDay() so the badge,
+// the calendar and the timeline can never disagree — this used to be a second
+// copy of the same priority chain, and the copy lacked the modulo fallback, so
+// the badge could read "Keine Daten" for a day the timeline had coloured in.
 function getCurrentPhase() {
-  const t = today();
-  const cycles = sortedCycles();
-  const preds = buildAllPhases().sort((a,b) => a.start > b.start ? 1 : -1);
-
-  // 1. Echte Periode
-  for (const c of cycles) {
-    if (t >= c.start && (!c.end || t <= c.end)) return {phase:'period', label:'Periode', color:'phase-period'};
-  }
-
-  // 2. Vorhergesagte Phasen – gleiche Reihenfolge wie im Zeitstrahl
-  for (const p of preds) {
-    if (t >= p.start && t <= p.end)        return {phase:'period',    label:'Voraus. Periode', color:'phase-period'};
-    if (t === p.hellDay)                   return {phase:'hellday',   label:'Hell Day',   color:'phase-pms'};
-    if (t >= p.pmsStart && t < p.start)   return {phase:'pms',       label:'PMS-Phase',       color:'phase-pms'};
-    if (t === p.ovulation)                 return {phase:'ovulation', label:'Eisprung',        color:'phase-ovulation'};
-    const ov = parseDate(p.ovulation);
-    for (let fd = -5; fd <= 1; fd++) {
-      if (t === dateStr(addDays(ov, fd))) return {phase:'fertile', label:'Fruchtbare Phase', color:'phase-ovulation'};
-    }
-  }
-
-  return {phase:'unknown', label:'Keine Daten', color:'phase-unknown'};
+  const cycles    = sortedCycles();
+  const avgCycle  = calcAvgCycle(cycles);
+  const avgPeriod = calcAvgPeriod(cycles);
+  const key = classifyDay(today(), cycles, buildAllPhases(), avgCycle, avgPeriod);
+  return PHASE_META[key] || PHASE_META.unknown;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -890,9 +949,12 @@ function getCurrentPhase() {
 // Single source of truth for day colouring — used by both timeline and calendar.
 // Priority (highest first): period > predPeriod > hellDay > pms > ovulation > fertile > follicular > luteal > unknown
 function classifyDay(ds, cycles, allPhases, avgCycle, avgPeriod) {
-  // Real period
+  // Real period. A cycle with no end date is still running, so it counts for
+  // the expected duration — the same assumption buildAllPhases() makes. Using
+  // only the start day would drop an ongoing period from the calendar after
+  // one day; treating it as open-ended would keep it forever.
   for (const c of cycles) {
-    const end = c.end || c.start;
+    const end = c.end || dateStr(addDays(c.start, avgPeriod - 1));
     if (ds >= c.start && ds <= end) return 'period';
   }
   // Predicted phases
@@ -919,17 +981,25 @@ function classifyDay(ds, cycles, allPhases, avgCycle, avgPeriod) {
   return 'unknown';
 }
 
-const PHASE_COLORS = {
-  period:      '#e8547a',
-  predPeriod:  '#fdd0de',
-  hellDay:     '#c0392b',
-  pms:         '#ffe4b0',
-  ovulation:   '#2ec4b6',
-  fertile:     '#d4f5e0',
-  follicular:  '#e8f6ff',
-  luteal:      '#f0ecff',
-  unknown:     '#ede8f0',
-};
+// Canvas takes colour strings, not var() references, so the drawing code reads
+// the current theme's values out of :root. Read once per draw — getComputedStyle
+// forces a style resolve, and the timeline asks for a colour per day.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function readPhaseColors() {
+  return {
+    period:     cssVar('--ph-period'),
+    predPeriod: cssVar('--ph-pred-period'),
+    hellDay:    cssVar('--ph-hell'),
+    pms:        cssVar('--ph-pms'),
+    ovulation:  cssVar('--ph-ovulation'),
+    fertile:    cssVar('--ph-fertile'),
+    follicular: cssVar('--ph-follicular'),
+    luteal:     cssVar('--ph-luteal'),
+    unknown:    cssVar('--ph-unknown'),
+  };
+}
 
 
 // ══════════════════════════════════════════════════════════
@@ -991,6 +1061,14 @@ function drawHormones() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
 
+  // Theme colours, read once per draw (Canvas cannot use var())
+  const bandFoll  = cssVar('--band-follicular');
+  const bandLut   = cssVar('--band-luteal');
+  const labelFoll = cssVar('--label-follicular');
+  const labelLut  = cssVar('--label-luteal');
+  const hInk      = cssVar('--chart-ink');
+  const lhColor   = cssVar('--hormone-lh');
+
   const dayW  = W / totalDays;
   const padT  = 14;   // space for labels above
   const padB  = 6;
@@ -1008,7 +1086,7 @@ function drawHormones() {
       dic = ((raw % avgCycle) + avgCycle) % avgCycle;
     }
     const x = i * dayW;
-    ctx.fillStyle = dic < ovDay ? 'rgba(200,220,255,0.18)' : 'rgba(212,180,100,0.12)';
+    ctx.fillStyle = dic < ovDay ? bandFoll : bandLut;
     ctx.fillRect(x, padT, dayW + 0.5, chartH);
   }
 
@@ -1026,12 +1104,12 @@ function drawHormones() {
 
   // Follicular label
   ctx.save();
-  ctx.fillStyle = 'rgba(92,53,200,0.55)';
+  ctx.fillStyle = labelFoll;
   ctx.font = '600 9px DM Sans, sans-serif';
   ctx.textAlign = 'center';
   if (ovX > 20) ctx.fillText('Follikelphase', Math.max(0, ovX / 2), 9);
   // Luteal label
-  ctx.fillStyle = 'rgba(46,125,79,0.55)';
+  ctx.fillStyle = labelLut;
   if (ovX < W - 20) ctx.fillText('Lutealphase', ovX + (W - ovX) / 2, 9);
   ctx.restore();
 
@@ -1041,7 +1119,7 @@ function drawHormones() {
   const hormones = [
     {
       name: 'Östrogen',
-      color: '#dc143c',
+      color: cssVar('--hormone-estrogen'),
       // rises through follicular, first peak at ovulation (~day 12-13),
       // smaller second peak mid-luteal (~day 21), falls before menses
       val: x => {
@@ -1054,7 +1132,7 @@ function drawHormones() {
     },
     {
       name: 'LH',
-      color: '#5c35c8',
+      color: cssVar('--hormone-lh'),
       // flat low, then sharp surge at ovulation, quickly gone
       val: x => {
         if (x < 0.40) return 0.06 + x/0.40 * 0.06;
@@ -1066,7 +1144,7 @@ function drawHormones() {
     },
     {
       name: 'FSH',
-      color: '#1a6db5',
+      color: cssVar('--hormone-fsh'),
       // small peak at start of cycle (menstrual), second smaller surge at ovulation
       val: x => {
         if (x < 0.04) return 0.30;
@@ -1080,7 +1158,7 @@ function drawHormones() {
     },
     {
       name: 'Progesteron',
-      color: '#2e8050',
+      color: cssVar('--hormone-progesterone'),
       // nearly zero through follicular, rises steeply after ovulation,
       // peaks mid-luteal (~day 21), then falls sharply before menses
       val: x => {
@@ -1156,7 +1234,7 @@ function drawHormones() {
   ctx.beginPath();
   ctx.moveTo(todayX, padT);
   ctx.lineTo(todayX, padT + chartH);
-  ctx.strokeStyle = 'rgba(45,31,43,.30)';
+  ctx.strokeStyle = hInk + '4d';   // ~30% alpha
   ctx.lineWidth = 1.5;
   ctx.setLineDash([3, 3]);
   ctx.stroke();
@@ -1168,7 +1246,7 @@ function drawHormones() {
     ctx.beginPath();
     ctx.moveTo(ox, padT);
     ctx.lineTo(ox, padT + chartH);
-    ctx.strokeStyle = '#5c35c888';
+    ctx.strokeStyle = lhColor + '88';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 3]);
     ctx.stroke();
@@ -1247,7 +1325,10 @@ function drawTimeline() {
   const allPhases = buildAllPhases(tDate.getFullYear(), tDate.getMonth());
 
   // ── Build a color for every day in the window ──
-  const dayColor = (ds) => PHASE_COLORS[classifyDay(ds, cycles, allPhases, avgCycle, avgPeriod)];
+  const palette  = readPhaseColors();
+  const ink      = cssVar('--chart-ink');
+  const muted    = cssVar('--chart-muted');
+  const dayColor = (ds) => palette[classifyDay(ds, cycles, allPhases, avgCycle, avgPeriod)];
 
   // ── Layout ──
   const barTop    = 28;
@@ -1287,7 +1368,7 @@ function drawTimeline() {
         ? 'Heute'
         : `${d.getDate()}.${d.getMonth()+1}.`;
       const x = (i + 0.5) * dayW;
-      ctx.fillStyle = offsetFromToday === 0 ? '#2d1f2b' : '#b89ab5';
+      ctx.fillStyle = offsetFromToday === 0 ? ink : muted;
       ctx.fillText(lbl, x, labelY);
     }
   }
@@ -1313,7 +1394,7 @@ function drawTimeline() {
   ctx.beginPath();
   ctx.moveTo(todayX, barTop - 10);
   ctx.lineTo(todayX, barBottom + 2);
-  ctx.strokeStyle = '#2d1f2b';
+  ctx.strokeStyle = ink;
   ctx.lineWidth = 2;
   ctx.setLineDash([]);
   ctx.stroke();
@@ -1324,7 +1405,7 @@ function drawTimeline() {
   ctx.lineTo(todayX + 5, barTop - 10);
   ctx.lineTo(todayX, barTop - 3);
   ctx.closePath();
-  ctx.fillStyle = '#2d1f2b';
+  ctx.fillStyle = ink;
   ctx.fill();
 }
 
@@ -1365,13 +1446,14 @@ function renderHome() {
     </span>`;
 
   // Timeline legend
+  const pal = readPhaseColors();
   const legendItems = [
-    {color: PHASE_COLORS.period,     label: 'Periode'},
-    {color: PHASE_COLORS.predPeriod, label: 'Voraus. Periode'},
-    {color: PHASE_COLORS.hellDay,    label: 'Hell Day'},
-    {color: PHASE_COLORS.pms,        label: 'PMS'},
-    {color: PHASE_COLORS.ovulation,  label: 'Eisprung'},
-    {color: PHASE_COLORS.fertile,    label: 'Fruchtbar'},
+    {color: pal.period,     label: 'Periode'},
+    {color: pal.predPeriod, label: 'Voraus. Periode'},
+    {color: pal.hellDay,    label: 'Hell Day'},
+    {color: pal.pms,        label: 'PMS'},
+    {color: pal.ovulation,  label: 'Eisprung'},
+    {color: pal.fertile,    label: 'Fruchtbar'},
   ];
   document.getElementById('timeline-legend').innerHTML =
     `<div style="display:flex;flex-wrap:wrap;gap:10px 16px">` +
@@ -1492,7 +1574,7 @@ function renderCyclesList() {
     html += `<div class="cycle-row">
       <div class="dot"></div>
       <div class="info">
-        <div class="dates">${fmtDate(c.start)} → ${fmtDate(c.end) || 'offen'}</div>
+        <div class="dates">${fmtDate(c.start)} → ${c.end ? fmtDate(c.end) : 'offen'}</div>
         <div class="meta">Dauer: ${dur} Tage · Zykluslänge: ${cycleLen === '–' ? '–' : cycleLen+' Tage'}</div>
       </div>
       <button class="icon-btn" title="Bearbeiten" data-edit-id="${c.id}">✏️</button>
@@ -1578,7 +1660,7 @@ function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean
   for (let i=0;i<=steps;i++) ctx.lineTo(toX(xMin+i*dx), toY(refYs[i]));
   ctx.lineTo(toX(xMax), toY(0));
   ctx.closePath();
-  ctx.fillStyle = 'rgba(180,160,175,0.18)';
+  ctx.fillStyle = cssVar('--chart-ref-fill');
   ctx.fill();
   // curve line
   ctx.beginPath();
@@ -1586,7 +1668,7 @@ function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean
     const x=toX(xMin+i*dx), y=toY(refYs[i]);
     i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
   }
-  ctx.strokeStyle = 'rgba(160,140,158,0.55)';
+  ctx.strokeStyle = cssVar('--chart-ref-stroke');
   ctx.lineWidth = 1.5;
   ctx.setLineDash([5,4]);
   ctx.lineJoin = 'round';
@@ -1595,7 +1677,7 @@ function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean
 
   if (!hasUser) {
     // No user data — show placeholder text
-    ctx.fillStyle = '#b89ab5';
+    ctx.fillStyle = cssVar('--chart-muted');
     ctx.font = '12px DM Sans, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Noch keine eigenen Daten (mind. 2 Einträge)', W/2, H/2 + 10);
@@ -1662,14 +1744,14 @@ function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean
     ctx.beginPath();
     ctx.moveTo(lx, pad.top);
     ctx.lineTo(lx, pad.top + ch);
-    ctx.strokeStyle = '#1a6db5';
+    ctx.strokeStyle = cssVar('--chart-accent');
     ctx.lineWidth = 2;
     ctx.setLineDash([]);
     ctx.stroke();
   }
 
   // x-axis labels
-  ctx.fillStyle = '#b89ab5';
+  ctx.fillStyle = cssVar('--chart-muted');
   ctx.font = '11px DM Sans, sans-serif';
   ctx.textAlign = 'center';
   const labelStep = Math.max(1, Math.ceil((xMax-xMin)/8));
@@ -1970,23 +2052,52 @@ function importData(event) {
         showToast('⚠️ Keine gültigen Einträge in der Datei gefunden');
         return;
       }
-      if (!confirm(`${validCycles.length} Zyklen importieren? Bestehende Daten werden zusammengeführt.${invalid > 0 ? ` (${invalid} ungültige Einträge übersprungen)` : ''}`)) return;
-      // Merge: add entries not already present (by id)
-      const existingIds = new Set(state.cycles.map(c => c.id));
-      let added = 0;
+      if (!confirm(`${validCycles.length} Zyklen aus der Datei zusammenführen? Bestehende Einträge bleiben erhalten.${invalid > 0 ? ` (${invalid} ungültige Einträge übersprungen)` : ''}`)) return;
+      // Merge. Ids are minted from Date.now() and are therefore per-device, so
+      // matching on id alone let the same period in twice when the file came
+      // from another phone. Match on the start date too — that is already the
+      // uniqueness rule saveModal enforces for manual entries.
+      const byId    = new Map(state.cycles.map(c => [c.id, c]));
+      const byStart = new Map(state.cycles.map(c => [c.start, c]));
+
+      let added = 0, completed = 0, duplicate = 0;
       for (const c of validCycles) {
-        if (!existingIds.has(c.id)) {
-          state.cycles.push(c);
-          added++;
+        if (byId.has(c.id)) { duplicate++; continue; }
+
+        const sameDay = byStart.get(c.start);
+        if (sameDay) {
+          // Same period recorded elsewhere: keep the more complete record
+          if (!sameDay.end && c.end) { sameDay.end = c.end; completed++; }
+          else duplicate++;
+          continue;
         }
+
+        state.cycles.push(c);
+        byId.set(c.id, c);
+        byStart.set(c.start, c);
+        added++;
       }
+
+      // Carry over the warning lead time when the file carries a valid one
+      let settingsTaken = false;
+      const impWarn = Number(parsed.settings && parsed.settings.warnDays);
+      if (Number.isFinite(impWarn) && impWarn >= 1 && impWarn <= 14
+          && Math.round(impWarn) !== state.settings.warnDays) {
+        state.settings.warnDays = Math.round(impWarn);
+        settingsTaken = true;
+      }
+
       save();
       renderAll();
-      if (added === 0) {
-        showToast('ℹ️ Alle Einträge bereits vorhanden – nichts hinzugefügt');
-      } else {
-        showToast(`✅ ${added} Einträge importiert`);
-      }
+
+      const parts = [];
+      if (added)         parts.push(`${added} neu`);
+      if (completed)     parts.push(`${completed} ergänzt`);
+      if (duplicate)     parts.push(`${duplicate} bereits vorhanden`);
+      if (settingsTaken) parts.push('Einstellung übernommen');
+      showToast(added || completed
+        ? `✅ Import: ${parts.join(', ')}`
+        : `ℹ️ Nichts hinzugefügt – ${parts.join(', ')}`);
     } catch (err) {
       showToast('⚠️ Fehler beim Lesen der Datei');
     }
@@ -2199,6 +2310,13 @@ document.getElementById('modal-overlay').addEventListener('keydown', function(e)
 });
 renderAll();
 window.addEventListener('resize', () => { renderStats(); drawHormones(); drawTimeline(); });
+
+// The canvases bake the theme's colours in at draw time, so they have to be
+// repainted when the system switches between light and dark.
+window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
+  renderHome();
+  renderStats();
+});
 
 // Request persistent storage to protect health data from browser eviction
 navigator.storage?.persist?.();
