@@ -113,7 +113,9 @@ const SEED = {
   check('start_url im Manifest', /"start_url"\s*:\s*"\.\/"/.test(man.data || ''), '');
   let shortcuts = 0, icons = 0;
   try { const d = JSON.parse(man.data); shortcuts = (d.shortcuts || []).length; icons = (d.icons || []).length; } catch (e) {}
-  check('2 Shortcuts + 2 Icons deklariert', shortcuts === 2 && icons === 2, `shortcuts=${shortcuts} icons=${icons}`);
+  // Icon purposes are asserted in push.js; here only that the manifest carries
+  // both shortcuts and some icons at all.
+  check('2 Shortcuts und Icons deklariert', shortcuts === 2 && icons >= 2, `shortcuts=${shortcuts} icons=${icons}`);
   const iconOK = await p1.evaluate(async () => {
     const r = await fetch('./icon-192.jpg');
     return r.ok && (r.headers.get('content-type') || '').includes('image');

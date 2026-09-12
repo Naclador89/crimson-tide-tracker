@@ -15,6 +15,7 @@ Die App wird statisch ausgeliefert (GitHub Pages), es gibt keinen Build-Schritt.
 | `cycle-core.js` | Reine Logik: Datumsrechnung, Mittelwerte, Phasenprojektion, Tagesklassifikation. Ohne DOM, ohne Storage — deshalb im Browser **und** in Node ladbar |
 | `sw.js` | Service Worker: Offline-Cache und Update-Erkennung |
 | `manifest.webmanifest` | PWA-Manifest |
+| `push-server/` | Optionaler Dienst für Benachrichtigungen bei geschlossener App. Die App funktioniert ohne ihn |
 | `tests/` | Unit- und Browsertests |
 
 `cycle-core.js` muss **vor** dem Inline-Skript geladen werden; es veröffentlicht
@@ -37,6 +38,7 @@ prüft das.
 tests/run.sh          # alles
 tests/run.sh unit     # nur Unit-Tests, braucht keinen Browser
 tests/run.sh e2e      # nur Browsertests
+cd push-server && npm test    # der optionale Dienst
 ```
 
 **Unit** (`tests/core.test.js`, `node --test`) prüft `cycle-core.js` und läuft
@@ -47,8 +49,12 @@ eine CI mit Standardeinstellung hätte ihn durchgelassen.
 **Browser** (`tests/e2e/*.js`, Playwright) deckt ab, was ein Unit-Test nicht
 erreicht: Service-Worker-Registrierung, Offline-Betrieb, PWA-Manifest,
 Benachrichtigungen, Wiederherstellung nach beschädigtem `localStorage`,
-Tastaturbedienung und das gerenderte DOM. Die drei Dateien entsprechen den
-Schweregraden eines Code-Reviews (`critical`, `medium`, `small`).
+Tastaturbedienung und das gerenderte DOM. `critical`, `medium` und `small`
+entsprechen den Schweregraden eines Code-Reviews, `push` deckt das maskierbare
+Icon und den Push-Weg ab — inklusive einer echten Push-Zustellung über das
+Chrome DevTools Protocol. Nur der Handshake mit dem Push-Dienst selbst ist
+gestubbt: der braucht einen erreichbaren Dienst, und Chrome schaltet die Push
+API in Inkognito-Kontexten ohnehin ab.
 
 Voraussetzung für die Browsertests:
 
@@ -71,8 +77,15 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
 - **Tagesklassifikation**: `classifyDay()` bzw. `makeDayClassifier()` sind die
   einzige Quelle dafür, welche Phase ein Tag hat. Kalender, Zeitstrahl und das
   Status-Badge greifen alle darauf zu. Keine zweite Implementierung danebenbauen.
-- **Benachrichtigungen** können ohne Push-Server nur zugestellt werden, während
-  die App offen ist oder geöffnet wird. Timer im Service Worker funktionieren
-  nicht — er wird nach Sekunden Leerlauf beendet.
+- **Benachrichtigungen** kommen standardmäßig nur an, während die App offen ist
+  oder geöffnet wird. Timer im Service Worker sind kein Ersatz — er wird nach
+  Sekunden Leerlauf beendet. Für Zustellung bei geschlossener App gibt es
+  `push-server/`; das ist opt-in und schickt nur einen Zeitstempel dorthin,
+  nie Zyklusdaten.
+- **Icons**: `icon-*.jpg` sind die normalen (`purpose: "any"`), die
+  `icon-maskable-*.png` haben einen Sicherheitsrand und dürfen von Android
+  beschnitten werden. Ein Icon darf nie beides gleichzeitig sein — wird ein
+  randloses Motiv als `maskable` deklariert, schneidet der Launcher hinein.
+  Ein Test prüft, dass außerhalb der mittleren 80 % nur Hintergrund liegt.
 - **Berechtigungsdialoge** brauchen eine echte Nutzergeste, sonst lehnt iOS
   Safari sie ab.
