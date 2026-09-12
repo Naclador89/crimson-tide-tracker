@@ -22,6 +22,8 @@ const PRECACHE = [
   './manifest.webmanifest',
   './icon-192.jpg',
   './icon-512.jpg',
+  './apple-touch-icon.png',
+  './logo.png',
 ];
 
 // No skipWaiting() here on purpose: a new worker stays in "waiting" so the
