@@ -1,0 +1,31 @@
+{
+  "name": "Crimson Tide Tracker",
+  "short_name": "Crimson Tide",
+  "description": "Pulled by the moon. Guided by data.",
+  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f8fc",
+  "theme_color": "#dc143c",
+  "orientation": "portrait",
+  "lang": "de",
+  "icons": [
+    { "src": "./icon-192.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any" },
+    { "src": "./icon-512.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Periode starten",
+      "short_name": "Start",
+      "description": "Periode beginnt heute",
+      "url": "./?action=quick-start"
+    },
+    {
+      "name": "Zyklus eintragen",
+      "short_name": "Eintragen",
+      "description": "Neuen Zyklus manuell eintragen",
+      "url": "./?action=add"
+    }
+  ]
+}
