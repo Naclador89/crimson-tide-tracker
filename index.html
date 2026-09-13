@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.2.0">
+  <meta name="app-version" content="1.6.0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -561,8 +561,10 @@
       <div id="notif-status" style="font-size:.78rem;color:var(--text-light);margin-top:10px"></div>
       <p style="font-size:.78rem;color:var(--text-light);margin-top:12px;line-height:1.5">
         Benachrichtigungen funktionieren auf <strong>Android</strong> (Chrome, installierte PWA) und auf <strong>iOS 16.4+</strong> nur wenn die App zum Home-Screen hinzugefügt wurde.
-        Die Warnung erscheint, sobald du die App am oder nach dem Warntag öffnest — ohne eigenen Server kann eine Web-App keine Mitteilung zustellen, während sie geschlossen ist.
+        Die Warnung erscheint, sobald du die App am oder nach dem Warntag öffnest.
       </p>
+    </div>
+
     </div>
     <div class="card">
       <div class="card-title"><span class="icon">⬇️</span>Daten exportieren</div>
@@ -624,6 +626,7 @@
 <!-- TOAST -->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="./cycle-core.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════
 // STATE
@@ -640,6 +643,16 @@ let state = {
   //                   so the same cycle is never announced twice
   settings: { warnDays: 3, lastNotifiedFor: null }
 };
+
+// ── Bindings to cycle-core.js ──
+// The core is pure: it takes cycles and a date instead of reaching for state
+// and the clock. These three wrappers supply them, so the rest of the app
+// calls sortedCycles()/buildAllPhases()/today() exactly as before.
+function sortedCycles()  { return CycleCore.sortCycles(state.cycles); }
+function today()         { return CycleCore.todayStr(); }
+function buildAllPhases(monthYear, monthMonth) {
+  return CycleCore.buildPhases(sortedCycles(), today(), monthYear, monthMonth);
+}
 
 let calendarMonth = new Date();
 let editingId = null;
@@ -658,18 +671,7 @@ function save() {
 }
 // Validates one cycle entry. Same rules the import uses, so data can never
 // enter the app through a path that skips them.
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const ID_RE   = /^[A-Za-z0-9_-]{1,64}$/;
-function isValidCycle(c) {
-  if (!c || typeof c !== 'object') return false;
-  if (typeof c.id !== 'string' || !ID_RE.test(c.id)) return false;
-  if (typeof c.start !== 'string' || !DATE_RE.test(c.start)) return false;
-  if (c.end != null) {
-    if (typeof c.end !== 'string' || !DATE_RE.test(c.end)) return false;
-    if (c.end < c.start) return false;
-  }
-  return true;
-}
+
 
 // Rebuilds a known-good state from whatever is in storage. Never throws and
 // never leaves state in a shape the renderers cannot handle — a single bad
@@ -735,33 +737,14 @@ function backupCorrupt(raw, reason) {
 // showToast(msg)   — displays a temporary toast notification
 //                    Warnings (⚠️) stay 4.5s, others 2.8s
 // ══════════════════════════════════════════════════════════
-function dateStr(d) {
-  if (!(d instanceof Date)) return d;
-  const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
-}
-function parseDate(s) {
-  if (!s) return null;
-  const [y,m,d] = s.split('-').map(Number);
-  return new Date(y, m-1, d);
-}
+
+
 // Accepts a Date or a 'YYYY-MM-DD' string. Strings are parsed as LOCAL
 // midnight (via parseDate) — new Date('2026-09-12') would parse as UTC
 // midnight instead, which lands on the previous day west of UTC.
-function addDays(date, n) {
-  const d = date instanceof Date ? new Date(date) : parseDate(date);
-  d.setDate(d.getDate()+n);
-  return d;
-}
-function diffDays(a, b) {
-  return Math.round((parseDate(dateStr(b)) - parseDate(dateStr(a))) / 86400000);
-}
-function fmtDate(s) {
-  if(!s) return '–';
-  const d = parseDate(s);
-  return d.toLocaleDateString('de-DE',{day:'2-digit',month:'short',year:'numeric'});
-}
-function today() { return dateStr(new Date()); }
+
+
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -775,9 +758,6 @@ function showToast(msg) {
 // Returns a copy of state.cycles sorted chronologically (oldest first).
 // Used as the basis for all predictions and rendering.
 // ══════════════════════════════════════════════════════════
-function sortedCycles() {
-  return [...state.cycles].sort((a,b)=>a.start>b.start?1:-1);
-}
 
 // ══════════════════════════════════════════════════════════
 // CYCLE AVERAGES
@@ -792,26 +772,11 @@ function sortedCycles() {
 //   Calculates average period duration from cycles that have an end date.
 //   Falls back to 5 days.
 // ══════════════════════════════════════════════════════════
-const MIN_CYCLE = 15;  // shortest plausible cycle (days)
-const MAX_CYCLE = 60;  // longest plausible single cycle (days)
                        // gaps > MAX_CYCLE = skipped month → excluded
 
-function calcAvgCycle(cycles) {
-  if (cycles.length < 2) return 28;
-  const validGaps = [];
-  for (let i = 1; i < cycles.length; i++) {
-    const gap = diffDays(cycles[i-1].start, cycles[i].start);
-    if (gap >= MIN_CYCLE && gap <= MAX_CYCLE) validGaps.push(gap);
-  }
-  if (!validGaps.length) return 28;
-  return Math.round(validGaps.reduce((a, b) => a + b, 0) / validGaps.length);
-}
 
-function calcAvgPeriod(cycles) {
-  const durs = cycles.filter(c => c.end).map(c => diffDays(c.start, c.end) + 1);
-  if (!durs.length) return 5;
-  return Math.round(durs.reduce((a, b) => a + b, 0) / durs.length);
-}
+
+
 
 // ══════════════════════════════════════════════════════════
 // PREDICTION ENGINE
@@ -844,7 +809,6 @@ function calcAvgPeriod(cycles) {
 //   Classifies today's phase for the status badge.
 //   Returns { phase, label, color } matching phaseColors keys.
 // ══════════════════════════════════════════════════════════
-const PMS_DAYS = 5;
 
 // buildAllPhases(monthYear?, monthMonth?)
 // Returns phase entries used for calendar/timeline colouring.
@@ -854,67 +818,7 @@ const PMS_DAYS = 5;
 //   2. PREDICTED phases — extrapolated forward and backward from the
 //      last recorded cycle for gaps where no data exists.
 // Real phases always take priority over predicted ones in classifyDay().
-function buildAllPhases(monthYear, monthMonth) {
-  const cycles = sortedCycles();
-  if (!cycles.length) return [];
 
-  const avgCycle  = calcAvgCycle(cycles);
-  const avgPeriod = calcAvgPeriod(cycles);
-
-  // Window bounds
-  const now = parseDate(today());
-  const defaultWinEnd = dateStr(new Date(now.getFullYear(), now.getMonth() + 18, 0));
-  let winStart = dateStr(new Date(now.getFullYear(), now.getMonth() - 18, 1));
-  let winEnd   = defaultWinEnd;
-  if (monthYear !== undefined) {
-    const ms = dateStr(new Date(monthYear, monthMonth - 1, 1));
-    const me = dateStr(new Date(monthYear, monthMonth + 2, 0));
-    if (ms < winStart) winStart = ms;
-    if (me > winEnd)   winEnd   = me;
-  }
-
-  const makeEntry = (d, avgPer) => ({
-    start:     dateStr(d),
-    end:       dateStr(addDays(d, avgPer - 1)),
-    pmsStart:  dateStr(addDays(d, -PMS_DAYS)),
-    hellDay:   dateStr(addDays(d, -7)),
-    ovulation: dateStr(addDays(d, -14)),
-  });
-
-  const all = [];
-
-  // ── 1. REAL phases from every recorded cycle ──
-  // Each real start date gets its own PMS/ovulation/hellDay window.
-  // Use the actual period duration where known, else avgPeriod.
-  for (const c of cycles) {
-    const dur = c.end ? diffDays(c.start, c.end) + 1 : avgPeriod;
-    all.push(makeEntry(parseDate(c.start), dur));
-  }
-
-  // ── 2. PREDICTED phases to fill gaps and extend into the future ──
-  const anchor = parseDate(cycles[cycles.length - 1].start);
-  const realStarts = new Set(cycles.map(c => c.start));
-
-  // Forward from last real cycle
-  let fwd = addDays(anchor, avgCycle);
-  for (let i = 0; i < 60; i++) {
-    const ds = dateStr(fwd);
-    if (ds > winEnd) break;
-    if (!realStarts.has(ds)) all.push(makeEntry(fwd, avgPeriod));
-    fwd = addDays(fwd, avgCycle);
-  }
-
-  // Backward to fill gaps before oldest real cycle
-  let bwd = addDays(parseDate(cycles[0].start), -avgCycle);
-  for (let i = 0; i < 60; i++) {
-    const ds = dateStr(bwd);
-    if (ds < winStart) break;
-    if (!realStarts.has(ds)) all.push(makeEntry(bwd, avgPeriod));
-    bwd = addDays(bwd, -avgCycle);
-  }
-
-  return all;
-}
 
 
 // Label and badge colour for each classifyDay() key. Predicted and recorded
@@ -963,56 +867,11 @@ function getCurrentPhase() {
 // Priority within a phase: predPeriod > hellDay > pms > ovulation > fertile.
 // Across phases the earliest matching phase wins, which is what the old
 // loop did by returning on its first hit; "set only if unset" reproduces it.
-function makeDayClassifier(cycles, allPhases, avgCycle, avgPeriod) {
-  // Recorded periods outrank everything, so they get their own set.
-  const real = new Set();
-  for (const c of cycles) {
-    const end = c.end || dateStr(addDays(c.start, avgPeriod - 1));
-    for (let d = parseDate(c.start), ds = dateStr(d); ds <= end; d = addDays(d, 1), ds = dateStr(d)) {
-      real.add(ds);
-    }
-  }
 
-  const phaseDays = new Map();
-  const put = (ds, key) => { if (!phaseDays.has(ds)) phaseDays.set(ds, key); };
-  for (const p of allPhases) {
-    for (let d = parseDate(p.start), ds = dateStr(d); ds <= p.end; d = addDays(d, 1), ds = dateStr(d)) {
-      put(ds, 'predPeriod');
-    }
-    put(p.hellDay, 'hellDay');
-    for (let d = parseDate(p.pmsStart), ds = dateStr(d); ds < p.start; d = addDays(d, 1), ds = dateStr(d)) {
-      put(ds, 'pms');
-    }
-    put(p.ovulation, 'ovulation');
-    const ov = parseDate(p.ovulation);
-    for (let fd = -5; fd <= 1; fd++) put(dateStr(addDays(ov, fd)), 'fertile');
-  }
-
-  const last = cycles.length ? cycles[cycles.length - 1] : null;
-
-  return function (ds) {
-    if (real.has(ds)) return 'period';
-    const hit = phaseDays.get(ds);
-    if (hit) return hit;
-
-    // Fallback via modulo, for dates outside the generated window
-    if (last) {
-      const d   = diffDays(last.start, ds);
-      const pos = ((d % avgCycle) + avgCycle) % avgCycle;
-      if (pos < avgPeriod)          return 'predPeriod';
-      if (pos < avgCycle - 14 - 5)  return 'unknown';
-      if (pos < avgCycle - 14 + 2)  return 'fertile';
-      return 'unknown';
-    }
-    return 'unknown';
-  };
-}
 
 // Single-day convenience wrapper. Bulk callers (calendar, timeline) build the
 // classifier once instead of going through this.
-function classifyDay(ds, cycles, allPhases, avgCycle, avgPeriod) {
-  return makeDayClassifier(cycles, allPhases, avgCycle, avgPeriod)(ds);
-}
+
 
 // Canvas takes colour strings, not var() references, so the drawing code reads
 // the current theme's values out of :root. Read once per draw — getComputedStyle
@@ -1535,11 +1394,26 @@ function renderHome() {
     const dov   = diffDays(t, np.ovulation);
     const dper  = diffDays(t, np.start);
 
+    // Every one of these is derived from the same predicted start, so they all
+    // carry the same uncertainty. Showing a hard date for something the data
+    // cannot pin down that precisely was the old behaviour; with enough
+    // recorded cycles the spread is shown instead.
+    const { spread } = CycleCore.calcCycleSpread(cycles);
+    const when  = d  => CycleCore.inDaysRange(d, spread);
+    const dates = ds => spread
+      ? fmtRange(dateStr(addDays(ds, -spread)), dateStr(addDays(ds, spread)))
+      : fmtDate(ds);
+
     const events = [];
-    if (dov   >= 0) events.push({d: dov,   html: `<span class="event-pill ovulation">🌿 Eisprung in ${dov} Tagen</span>`});
-    if (dhell >= 0) events.push({d: dhell, html: `<span class="event-pill" style="background:#ffe0e0;color:#8a0000">😤 Hell Day in ${dhell} Tagen (${fmtDate(np.hellDay)})</span>`});
-    if (dpms  >= 0) events.push({d: dpms,  html: `<span class="event-pill pms">🌕 PMS in ${dpms} Tagen (${fmtDate(np.pmsStart)})</span>`});
-    if (dper  >= 0) events.push({d: dper,  html: `<span class="event-pill period">🩸 Periode in ${dper} Tagen (${fmtDate(np.start)})</span>`});
+    if (dov   >= 0) events.push({d: dov,   html: `<span class="event-pill ovulation">🌿 Eisprung ${when(dov)}</span>`});
+    if (dhell >= 0) events.push({d: dhell, html: `<span class="event-pill" style="background:#ffe0e0;color:#8a0000">😤 Hell Day ${when(dhell)} (${dates(np.hellDay)})</span>`});
+    if (dpms  >= 0) events.push({d: dpms,  html: `<span class="event-pill pms">🌕 PMS ${when(dpms)} (${dates(np.pmsStart)})</span>`});
+    if (dper  >= 0) events.push({d: dper,  html: `<span class="event-pill period">🩸 Periode ${when(dper)} (${dates(np.start)})</span>`});
+
+    // Say once where the range comes from, rather than on every pill.
+    if (spread) events.push({d: Infinity, html:
+      `<span style="font-size:.72rem;color:var(--text-light);padding:2px 4px">`
+      + `Spanne aus der Schwankung deiner letzten Zyklen (±${spread} ${spread === 1 ? 'Tag' : 'Tage'})</span>`});
 
     events.sort((a, b) => a.d - b.d);
     evHtml = events.map(e => e.html).join('');
@@ -1680,9 +1554,7 @@ const POPULATION = {
   duration: { mean: 4.7,  std: 1.4 }
 };
 
-function normalPDF(x, mean, std) {
-  return (1 / (std * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mean) / std, 2));
-}
+
 
 function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean, refStd, lastValue) {
   const canvas = document.getElementById(canvasId);
@@ -1851,12 +1723,9 @@ function renderStats() {
     return;
   }
 
-  // Only consecutive gaps within plausible range (skipped months excluded)
-  const lengths = [];
-  for (let i=1;i<cycles.length;i++) {
-    const gap = diffDays(cycles[i-1].start, cycles[i].start);
-    if (gap >= MIN_CYCLE && gap <= MAX_CYCLE) lengths.push(gap);
-  }
+  // Same list the averages and the spread are built from — one definition of
+  // "a plausible cycle length", not a second copy of the rule.
+  const lengths = cycleGaps(cycles);
   const durations = cycles.filter(c=>c.end).map(c=>diffDays(c.start,c.end)+1);
 
   // Last recorded values for the red marker
@@ -1866,10 +1735,13 @@ function renderStats() {
   const avgLen = lengths.length ? Math.round(lengths.reduce((a,b)=>a+b,0)/lengths.length) : '–';
   const avgDur = durations.length ? Math.round(durations.reduce((a,b)=>a+b,0)/durations.length) : '–';
 
+  const { sd, n: nGaps } = CycleCore.calcCycleSpread(cycles);
   const grid = [
     {val: cycles.length,                    label:'Eingetragene Zyklen'},
     {val: avgLen!=='–' ? avgLen+'T' : '–',  label:'Ø Zykluslänge'},
     {val: avgDur!=='–' ? avgDur+'T' : '–',  label:'Ø Periodendauer'},
+    {val: nGaps >= 2 ? '±' + (Math.round(sd*10)/10) + 'T' : '–',
+     label: 'Schwankung Zyklus'},
   ];
 
   // Gaps outside MIN_CYCLE..MAX_CYCLE are treated as a skipped month and left
@@ -2277,8 +2149,8 @@ function periodWarningMessage(days) {
 //   after a few seconds of idle time and every pending timer dies with them,
 //   so an alarm days or weeks out never fired.
 //
-//   Without a push server there is no way to wake a closed app, so the check
-//   runs whenever the app is opened or brought to the foreground. The warning
+//   Nothing can wake a closed app from a static host, so the check runs
+//   whenever the app is opened or brought to the foreground. The warning
 //   therefore appears the next time the app is opened at or after the warning
 //   date — which is honest, and said as much in the settings tab.
 //
@@ -2575,7 +2447,8 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.ready.then(() => checkDueNotification());
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkDueNotification();
+  if (document.visibilityState !== 'visible') return;
+  checkDueNotification();
 });
 </script>
 

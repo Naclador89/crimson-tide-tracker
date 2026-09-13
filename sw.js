@@ -19,9 +19,12 @@ const CACHE   = 'ctt-v' + VERSION;
 const PRECACHE = [
   './',
   './index.html',
+  './cycle-core.js',
   './manifest.webmanifest',
   './icon-192.jpg',
   './icon-512.jpg',
+  './icon-maskable-192.png',
+  './icon-maskable-512.png',
   './apple-touch-icon.png',
   './logo.png',
 ];
@@ -36,6 +39,8 @@ self.addEventListener('install', e => {
   );
 });
 
+// Deleting every cache but the current one also clears anything an earlier
+// version left behind.
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
@@ -67,6 +72,7 @@ self.addEventListener('message', e => {
   // Sent by the page when the user taps the update toast.
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
 });
+
 
 // Focus an already open window instead of stacking up new ones.
 self.addEventListener('notificationclick', e => {
