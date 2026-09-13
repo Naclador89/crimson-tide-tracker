@@ -92,6 +92,17 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
   Server samt Domain. Das widerspricht dem Kern dieser App, also gibt es das
   bewusst nicht. Timer im Service Worker sind übrigens auch kein Ersatz — er
   wird nach Sekunden Leerlauf beendet.
+- **Farben**: Jede Farbe steht als CSS-Variable in `:root` und wird im
+  `@media (prefers-color-scheme: dark)`-Block überschrieben. Zwei Fallen: Eine
+  eingefärbte Fläche muss **immer auch ihre Schriftfarbe setzen** — erbt sie
+  `--text`, steht im Dark Mode Weiß auf Pastell. Und Inline-Styles (auch die
+  aus dem JS erzeugten Badges und Pills) lassen sich von keiner Media Query
+  überschreiben, also gehört dort `var(--…)` hinein statt eines Hex-Werts.
+  Deshalb gibt es die Paare `--day-*-bg`/`--day-*-ink` (Kalenderzellen) und
+  `--pill-*-bg`/`--pill-*-ink` (Pills und Badge). Die Chart-Palette `--ph-*`
+  ist davon getrennt: sie landet per `getComputedStyle` auf dem Canvas, der
+  kein `var()` auflösen kann. Ein Test fährt über jeden sichtbaren Textknoten
+  und besteht auf 4.5:1 im Dark Mode.
 - **Icons**: `icon-*.jpg` sind die normalen (`purpose: "any"`), die
   `icon-maskable-*.png` haben einen Sicherheitsrand und dürfen von Android
   beschnitten werden. Ein Icon darf nie beides gleichzeitig sein — wird ein

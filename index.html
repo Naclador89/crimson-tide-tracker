@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.6.0">
+  <meta name="app-version" content="1.7.0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -59,11 +59,30 @@
 </style>
 <style>
   :root {
+    /* Native widgets (date picker, select popup, scrollbars, spin buttons)
+       follow this, not our variables. Without it they stay white in dark
+       mode — the one part of the page CSS alone cannot repaint. */
+    color-scheme: light dark;
+
     /* ── Logo palette: Navy + Crimson + White ── */
     --rose: #dc143c;
     --rose-light: #ff4060;
     --rose-pale: #fde8ec;
     --rose-dark: #a00e2b;
+    /* Crimson as *text* on a surface, as opposed to a crimson surface with
+       white on it. On white #dc143c clears 4.5:1, on the dark navy card it
+       only reaches 2.8:1 — so this one gets its own dark value, and anything
+       that paints letters or icons in crimson uses it instead of --rose. */
+    --rose-ink: #dc143c;
+    --rose-tint: rgba(220,20,60,0.10);
+    --rose-border: rgba(220,20,60,0.40);
+    /* Destructive actions: a crimson surface (--danger) and crimson letters
+       (--danger-ink), split for the same reason. */
+    --danger: #a00e2b;
+    --danger-ink: #a00e2b;
+    --danger-border: rgba(160,14,43,0.25);
+    --danger-tint: rgba(200,0,0,0.08);
+    --overlay: rgba(15,29,53,0.5);
     --cream: #f7f8fc;
     --warm-white: #eef2f9;
     --text: #0f1d35;
@@ -97,6 +116,39 @@
     --chart-ref-fill:   rgba(180,160,175,0.18);
     --chart-ref-stroke: rgba(160,140,158,0.55);
 
+    /* ── Phase surfaces ──
+       Every phase appears twice: as a calendar cell (--day-*, saturated
+       enough to read at 30px) and as a pill or badge (--pill-*, softer,
+       larger area). Both carry their own ink, because in dark mode a pale
+       tint with dark text has to become a deep tint with pale text — a cell
+       that only sets a background inherits --text and paints near-white on
+       pastel, which is exactly what made the dark calendar unreadable.
+       The chart palette above (--ph-*) stays separate: it is painted onto
+       canvas by the renderers, which cannot resolve var(). */
+    --day-pred-bg:    #fdd0d8;  --day-pred-ink:    #8c0c26;
+    --day-pms-bg:     #ffe4a0;  --day-pms-ink:     #6b4a00;
+    --day-hell-bg:    #a00e2b;  --day-hell-ink:    #ffffff;
+    --day-fertile-bg: #c0eedd;  --day-fertile-ink: #0e5a3a;
+    --day-ov-bg:      #0c7f76;  --day-ov-ink:      #ffffff;
+    --day-foll-bg:    #d4e8ff;  --day-foll-ink:    #1a4a80;
+    --day-lut-bg:     #e4dcff;  --day-lut-ink:     #40227a;
+
+    --pill-period-bg:  #fde0e4;  --pill-period-ink:  #8c0c26;
+    --pill-pms-bg:     #fff3d0;  --pill-pms-ink:     #7a4f00;
+    --pill-hell-bg:    #ffe0e0;  --pill-hell-ink:    #8a0000;
+    --pill-ov-bg:      #d0f5f0;  --pill-ov-ink:      #0a6e62;
+    --pill-foll-bg:    #ddeeff;  --pill-foll-ink:    #1a4a80;
+    --pill-lut-bg:     #ede8ff;  --pill-lut-ink:     #40227a;
+    --pill-unknown-bg: #eef2f9;  --pill-unknown-ink: #2e4a72;
+
+    /* The two distribution curves in the statistics charts. Canvas again:
+       the renderer reads these as strings and appends an alpha suffix, so
+       they must stay 6-digit hex. */
+    --chart-curve-1: #dc143c;
+    --chart-curve-2: #a00e2b;
+    /* Hairlines between the day segments of the timeline bar. */
+    --chart-sep: rgba(255,255,255,0.5);
+
     --hormone-estrogen:     #dc143c;
     --hormone-lh:           #5c35c8;
     --hormone-fsh:          #1a6db5;
@@ -111,12 +163,31 @@
       --cream: #0d1b2e;
       --warm-white: #162337;
       --card: #1a2d45;
+      /* Measured against --card (#1a2d45): --text 14.9:1, --text-mid 8.4:1,
+         --text-light 5.8:1. The old --text-mid/--text-light were carried over
+         from the light theme and landed at 6.2:1 and 3.2:1 — the second one
+         fails AA, and it is what the calendar weekday row, every stat label,
+         the chart captions and the cycle list meta line are painted in. */
       --text: #e8f0ff;
-      --text-mid: #93afd4;
-      --text-light: #5a7aaa;
-      --border: #2a3f5c;
+      --text-mid: #b7cbe8;
+      --text-light: #8fa9d0;
+      /* The old #2a3f5c divider all but vanished against the card; card
+         edges, input outlines and the tab strip need to be findable. */
+      --border: #3d557a;
       --shadow: 0 4px 24px rgba(0,0,0,0.35);
       --shadow-lg: 0 8px 40px rgba(0,0,0,0.50);
+
+      /* --rose stays the button/badge surface (white on it is 5:1 either
+         way); only the ink brightens, to 5.3:1 on the card. */
+      --rose-ink: #ff6f8d;
+      --rose-pale: #3d2233;
+      --rose-tint: rgba(255,111,141,0.16);
+      --rose-border: rgba(255,111,141,0.45);
+      --danger: #b3162f;
+      --danger-ink: #ff8a8a;
+      --danger-border: rgba(255,138,138,0.30);
+      --danger-tint: rgba(255,138,138,0.16);
+      --overlay: rgba(4,9,17,0.62);
 
       /* Chart palette, dark: pale pastels become deep tints that still read
          as the same hue against the card, and every ink colour flips. */
@@ -129,6 +200,31 @@
       --ph-follicular:  #1c3450;
       --ph-luteal:      #322a55;
       --ph-unknown:     #24344a;
+
+      /* Phase surfaces, dark: the pale tint and the dark ink swap roles.
+         Each pair clears 5.5:1. */
+      --day-pred-bg:    #6d2740;  --day-pred-ink:    #ffd0dc;
+      --day-pms-bg:     #7a5a1c;  --day-pms-ink:     #ffeec2;
+      --day-hell-bg:    #b3162f;  --day-hell-ink:    #ffffff;
+      --day-fertile-bg: #1f5340;  --day-fertile-ink: #b6ecd3;
+      --day-ov-bg:      #2ec4b6;  --day-ov-ink:      #06322e;
+      --day-foll-bg:    #1c3450;  --day-foll-ink:    #bcd8f8;
+      --day-lut-bg:     #322a55;  --day-lut-ink:     #d5cbff;
+
+      --pill-period-bg:  #5c2035;  --pill-period-ink:  #ffd0dc;
+      --pill-pms-bg:     #6a4d18;  --pill-pms-ink:     #ffeec2;
+      --pill-hell-bg:    #5c2020;  --pill-hell-ink:    #ffc9c9;
+      --pill-ov-bg:      #14493a;  --pill-ov-ink:      #a9ecd8;
+      --pill-foll-bg:    #1c3450;  --pill-foll-ink:    #bcd8f8;
+      --pill-lut-bg:     #322a55;  --pill-lut-ink:     #d5cbff;
+      --pill-unknown-bg: #24344a;  --pill-unknown-ink: #c3d5ee;
+
+      /* #a00e2b on navy is all but invisible; both curves move up. */
+      --chart-curve-1: #ff6f8d;
+      --chart-curve-2: #ff9db0;
+      /* White hairlines glared on the dark timeline bar — cut into it
+         instead of drawing on top of it. */
+      --chart-sep: rgba(10,18,30,0.45);
 
       --chart-ink:    #e8f0ff;
       --chart-muted:  #7e97bd;
@@ -173,7 +269,7 @@
   header h1 {
     font-family: 'DM Serif Display', serif;
     font-size: 2rem;
-    color: var(--rose);
+    color: var(--rose-ink);
     letter-spacing: -0.5px;
   }
   header .subtitle { color: var(--text-mid); font-size: 0.85rem; }
@@ -224,7 +320,7 @@
   .card-title {
     font-family: 'DM Serif Display', serif;
     font-size: 1.1rem;
-    color: var(--rose);
+    color: var(--rose-ink);
     margin-bottom: 14px;
     display: flex; align-items: center; gap: 8px;
   }
@@ -238,9 +334,10 @@
     font-size: 0.82rem; font-weight: 500;
     display: flex; align-items: center; gap: 6px;
   }
-  .event-pill.pms { background: #fff3d0; color: #8a5a00; }
-  .event-pill.period { background: #fde0e4; color: #a00e2b; }
-  .event-pill.ovulation { background: #d0f5f0; color: #0a6e62; }
+  .event-pill.pms { background: var(--pill-pms-bg); color: var(--pill-pms-ink); }
+  .event-pill.period { background: var(--pill-period-bg); color: var(--pill-period-ink); }
+  .event-pill.ovulation { background: var(--pill-ov-bg); color: var(--pill-ov-ink); }
+  .event-pill.hell { background: var(--pill-hell-bg); color: var(--pill-hell-ink); }
 
   /* ── QUICK ENTRY ── */
   .quick-btn {
@@ -258,11 +355,11 @@
   .quick-btn:hover { background: var(--rose-dark); transform: translateY(-1px); }
   .quick-btn.secondary {
     background: transparent;
-    color: var(--rose);
-    border: 1.5px solid rgba(220,20,60,0.4);
+    color: var(--rose-ink);
+    border: 1.5px solid var(--rose-border);
     box-shadow: none;
   }
-  .quick-btn.secondary:hover { background: rgba(220,20,60,0.08); }
+  .quick-btn.secondary:hover { background: var(--rose-tint); }
 
   /* ── FORM ── */
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -308,7 +405,7 @@
     cursor:pointer; font-size:1rem; color:var(--text-mid);
     transition:all .2s;
   }
-  .cal-nav:hover { border-color:var(--rose); color:var(--rose); }
+  .cal-nav:hover { border-color:var(--rose-ink); color:var(--rose-ink); }
   .cal-month { font-family:'DM Serif Display',serif; font-size:1.15rem; color:var(--text); }
 
   .cal-grid {
@@ -326,19 +423,22 @@
     position:relative; transition:all .15s;
     border: 1.5px solid transparent;
   }
-  .cal-day:hover { background:rgba(220,20,60,0.10); }
+  .cal-day:hover { background:var(--rose-tint); }
   .cal-day.empty { pointer-events:none; }
-  .cal-day.today { border-color:var(--rose); font-weight:700; color:var(--rose); }
+  .cal-day.today { border-color:var(--rose-ink); font-weight:700; color:var(--rose-ink); }
   .cal-day.period-day { background: var(--rose); color:#fff; font-weight:600; }
   .cal-day.period-day:hover { background: var(--rose-dark); }
-  .cal-day.predicted-period { background: #fdd0d8; color: #a00e2b; }
-  .cal-day.predicted-pms { background: #ffe4a0; }
-  .cal-day.hell-day { background: #a00e2b; color: #fff; font-weight: 700; }
-  .cal-day.fertile-day { background: #c0eedd; color: #0e5a3a; }
-  .cal-day.ovulation-day { background: #1aada0; color: #fff; font-weight: 700; }
-  .cal-day.other-month { color: var(--text-light); opacity:.4; }
-  .cal-day.follicular-day { background: #d4e8ff; }
-  .cal-day.luteal-day { background: #e4dcff; }
+  /* Every coloured cell sets its ink as well as its background. Leaving the
+     ink to inherit is what painted --text (near-white in dark mode) onto the
+     pale PMS, follicular and luteal cells. */
+  .cal-day.predicted-period { background: var(--day-pred-bg); color: var(--day-pred-ink); }
+  .cal-day.predicted-pms { background: var(--day-pms-bg); color: var(--day-pms-ink); }
+  .cal-day.hell-day { background: var(--day-hell-bg); color: var(--day-hell-ink); font-weight: 700; }
+  .cal-day.fertile-day { background: var(--day-fertile-bg); color: var(--day-fertile-ink); }
+  .cal-day.ovulation-day { background: var(--day-ov-bg); color: var(--day-ov-ink); font-weight: 700; }
+  .cal-day.other-month { color: var(--text-light); opacity:.55; }
+  .cal-day.follicular-day { background: var(--day-foll-bg); color: var(--day-foll-ink); }
+  .cal-day.luteal-day { background: var(--day-lut-bg); color: var(--day-lut-ink); }
 
   .cal-legend { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
   .legend-item { display:flex;align-items:center;gap:5px;font-size:0.75rem;color:var(--text-mid); }
@@ -354,7 +454,7 @@
     padding:12px 16px;
     transition:border-color .2s;
   }
-  .cycle-row:hover { border-color:var(--rose); }
+  .cycle-row:hover { border-color:var(--rose-ink); }
   .cycle-row .dot { width:10px;height:10px;border-radius:50%;background:var(--rose);flex-shrink:0; }
   .cycle-row .info { flex:1; }
   .cycle-row .dates { font-weight:500; font-size:0.88rem; }
@@ -364,8 +464,8 @@
     font-size:1rem;padding:4px;border-radius:6px;
     color:var(--text-light);transition:all .15s;
   }
-  .icon-btn:hover { color:var(--rose);background:var(--rose-pale); }
-  .icon-btn.del:hover { color:#cc0000;background:rgba(200,0,0,0.08); }
+  .icon-btn:hover { color:var(--rose-ink);background:var(--rose-pale); }
+  .icon-btn.del:hover { color:var(--danger-ink);background:var(--danger-tint); }
 
   /* ── STATS ── */
   .stats-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:14px; }
@@ -374,7 +474,7 @@
     background:var(--warm-white);border:1.5px solid var(--border);
     border-radius:var(--radius-sm);padding:16px;text-align:center;
   }
-  .stat-box .s-val { font-family:'DM Serif Display',serif;font-size:1.6rem;color:var(--rose); }
+  .stat-box .s-val { font-family:'DM Serif Display',serif;font-size:1.6rem;color:var(--rose-ink); }
   .stat-box .s-label { font-size:0.75rem;color:var(--text-light);margin-top:3px; }
 
   .chart-legend {
@@ -392,7 +492,7 @@
 
   /* ── MODAL ── */
   .modal-overlay {
-    position:fixed;inset:0;background:rgba(15,29,53,.5);
+    position:fixed;inset:0;background:var(--overlay);
     backdrop-filter:blur(4px);
     display:flex;align-items:center;justify-content:center;
     z-index:999;
@@ -411,14 +511,14 @@
     transform:translateY(16px);transition:transform .25s;
   }
   .modal-overlay.open .modal { transform:translateY(0); }
-  .modal-title { font-family:'DM Serif Display',serif;font-size:1.2rem;color:var(--rose);margin-bottom:18px; }
+  .modal-title { font-family:'DM Serif Display',serif;font-size:1.2rem;color:var(--rose-ink);margin-bottom:18px; }
   .modal-actions { display:flex;gap:10px;justify-content:flex-end;margin-top:18px; }
   .btn-cancel {
     background:none;border:1.5px solid var(--border);border-radius:50px;
     padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:0.85rem;
     color:var(--text-mid);cursor:pointer;transition:all .2s;
   }
-  .btn-cancel:hover { border-color:var(--rose);color:var(--rose); }
+  .btn-cancel:hover { border-color:var(--rose-ink);color:var(--rose-ink); }
 
   /* ── TOAST ── */
   .toast {
@@ -436,7 +536,7 @@
 
   /* Keyboard focus was invisible everywhere — nothing in the app styled it. */
   :focus-visible {
-    outline: 3px solid var(--rose);
+    outline: 3px solid var(--rose-ink);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -497,11 +597,11 @@
       <div class="cal-grid" id="cal-grid" role="grid" aria-label="Zykluskalender"></div>
       <div class="cal-legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--rose)"></div>Periode (eingetragen)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#fdd0de"></div>Voraussicht. Periode</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#ffe4b0"></div>Voraussicht. PMS</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#c0392b"></div>Hell Day</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#2ec4b6"></div>Eisprung</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#d4f5e0;border:1.5px solid #2ec4b6"></div>Fruchtbare Phase</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--day-pred-bg)"></div>Voraussicht. Periode</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--day-pms-bg)"></div>Voraussicht. PMS</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--day-hell-bg)"></div>Hell Day</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--day-ov-bg)"></div>Eisprung</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--day-fertile-bg);border:1.5px solid var(--day-ov-bg)"></div>Fruchtbare Phase</div>
       </div>
     </div>
   </div>
@@ -526,9 +626,9 @@
       <canvas id="chart-cycle" height="140" style="width:100%;display:block"></canvas>
       <div id="chart-cycle-info" style="text-align:center;font-size:.78rem;color:var(--text-light);margin-top:6px"></div>
       <div class="chart-legend">
-        <span class="legend-entry"><span class="legend-line" style="background:var(--rose);opacity:.7"></span>Deine Verteilung</span>
-        <span class="legend-entry"><span class="legend-line" style="background:rgba(160,140,158,0.55)"></span>Bevölkerungsschnitt</span>
-        <span class="legend-entry"><span class="legend-line" style="background:#1a6db5"></span>Letzter Zyklus</span>
+        <span class="legend-entry"><span class="legend-line" style="background:var(--chart-curve-1);opacity:.85"></span>Deine Verteilung</span>
+        <span class="legend-entry"><span class="legend-line" style="background:var(--chart-ref-stroke)"></span>Bevölkerungsschnitt</span>
+        <span class="legend-entry"><span class="legend-line" style="background:var(--chart-accent)"></span>Letzter Zyklus</span>
       </div>
     </div>
     <div class="card">
@@ -536,9 +636,9 @@
       <canvas id="chart-duration" height="140" style="width:100%;display:block"></canvas>
       <div id="chart-duration-info" style="text-align:center;font-size:.78rem;color:var(--text-light);margin-top:6px"></div>
       <div class="chart-legend">
-        <span class="legend-entry"><span class="legend-line" style="background:var(--rose-light);opacity:.9"></span>Deine Verteilung</span>
-        <span class="legend-entry"><span class="legend-line" style="background:rgba(160,140,158,0.55)"></span>Bevölkerungsschnitt</span>
-        <span class="legend-entry"><span class="legend-line" style="background:#1a6db5"></span>Letzte Periode</span>
+        <span class="legend-entry"><span class="legend-line" style="background:var(--chart-curve-1);opacity:.85"></span>Deine Verteilung</span>
+        <span class="legend-entry"><span class="legend-line" style="background:var(--chart-ref-stroke)"></span>Bevölkerungsschnitt</span>
+        <span class="legend-entry"><span class="legend-line" style="background:var(--chart-accent)"></span>Letzte Periode</span>
       </div>
     </div>
   </div>
@@ -580,10 +680,10 @@
       <button class="quick-btn secondary" data-action="pick-import-file" style="margin:0">⬆ Datei auswählen</button>
       <input type="file" id="import-file-input" accept=".json" style="display:none">
     </div>
-    <div class="card" style="border:1.5px solid rgba(160,14,43,0.25)">
-      <div class="card-title" style="color:#a00e2b"><span class="icon">🗑️</span>App zurücksetzen</div>
+    <div class="card" style="border:1.5px solid var(--danger-border)">
+      <div class="card-title" style="color:var(--danger-ink)"><span class="icon">🗑️</span>App zurücksetzen</div>
       <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:18px;line-height:1.6">Löscht alle eingetragenen Zyklen unwiderruflich. Erstelle vorher eine Sicherungskopie über den Export.</p>
-      <button class="quick-btn" data-action="reset" style="margin:0;background:#a00e2b;box-shadow:0 4px 16px rgba(160,14,43,0.3)">🗑️ Alle Daten löschen</button>
+      <button class="quick-btn" data-action="reset" style="margin:0;background:var(--danger);box-shadow:0 4px 16px rgba(160,14,43,0.3)">🗑️ Alle Daten löschen</button>
     </div>
   </div>
 
@@ -597,7 +697,7 @@
     <p id="confirm-msg" style="font-size:.88rem;color:var(--text-mid);margin-bottom:4px"></p>
     <div class="modal-actions">
       <button class="btn-cancel" data-action="close-confirm">Abbrechen</button>
-      <button class="save-btn" id="confirm-ok" style="margin-top:0;background:#a00e2b">Löschen</button>
+      <button class="save-btn" id="confirm-ok" style="margin-top:0;background:var(--danger)">Löschen</button>
     </div>
   </div>
 </div>
@@ -879,6 +979,12 @@ function getCurrentPhase() {
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
+// The two distribution curves. drawNormalChart appends an alpha suffix to
+// these strings, so they have to resolve to 6-digit hex — and they have to be
+// read at draw time, not cached, because the theme can flip while the app is
+// open.
+function curve1() { return cssVar('--chart-curve-1'); }
+function curve2() { return cssVar('--chart-curve-2'); }
 function readPhaseColors() {
   return {
     period:     cssVar('--ph-period'),
@@ -1266,7 +1372,7 @@ function drawTimeline() {
   }
 
   // ── Segment border lines (subtle) ──
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.strokeStyle = cssVar('--chart-sep');
   ctx.lineWidth = 0.5;
   for (let i = 1; i < totalDays; i++) {
     ctx.beginPath();
@@ -1348,19 +1454,22 @@ function renderHome() {
   const np = allPhases
     .filter(p => p.start >= t)
     .sort((a,b) => a.start > b.start ? 1 : -1)[0] || null;
-  const phaseColors = {
-    'phase-period':     {bg:'#fde0e4', color:'#a00e2b'},
-    'phase-pms':        {bg:'#fff3d0', color:'#8a5a00'},
-    'phase-follicular': {bg:'#ddeeff', color:'#1a4a80'},
-    'phase-ovulation':  {bg:'#d0f5f0', color:'#0a6e62'},
-    'phase-luteal':     {bg:'#ede8ff', color:'#4a2888'},
-    'phase-unknown':    {bg:'#eef2f9', color:'#2e4a72'},
+  // var() rather than literals: this is an inline style, so a dark-mode CSS
+  // rule could not override it — the badge would stay a pastel blob with dark
+  // text while everything around it went navy.
+  const phaseToken = {
+    'phase-period':     'period',
+    'phase-pms':        'pms',
+    'phase-follicular': 'foll',
+    'phase-ovulation':  'ov',
+    'phase-luteal':     'lut',
+    'phase-unknown':    'unknown',
   };
-  const pc = phaseColors[phase.color] || phaseColors['phase-unknown'];
+  const tok = phaseToken[phase.color] || phaseToken['phase-unknown'];
   // Clear badge when period is active — warning is no longer needed
   if (phase.phase === 'period') navigator.clearAppBadge?.().catch(() => {});
   document.getElementById('home-phase-badge').innerHTML =
-    `<span style="display:inline-flex;align-items:center;gap:10px;background:${pc.bg};color:${pc.color};border-radius:50px;padding:8px 18px;font-weight:600;font-size:.9rem">
+    `<span style="display:inline-flex;align-items:center;gap:10px;background:var(--pill-${tok}-bg);color:var(--pill-${tok}-ink);border-radius:50px;padding:8px 18px;font-weight:600;font-size:.9rem">
       ${phase.label} <span style="font-weight:400;font-size:.8rem;opacity:.75">· Tag ${dayNum} im Zyklus</span>
     </span>`;
 
@@ -1406,7 +1515,7 @@ function renderHome() {
 
     const events = [];
     if (dov   >= 0) events.push({d: dov,   html: `<span class="event-pill ovulation">🌿 Eisprung ${when(dov)}</span>`});
-    if (dhell >= 0) events.push({d: dhell, html: `<span class="event-pill" style="background:#ffe0e0;color:#8a0000">😤 Hell Day ${when(dhell)} (${dates(np.hellDay)})</span>`});
+    if (dhell >= 0) events.push({d: dhell, html: `<span class="event-pill hell">😤 Hell Day ${when(dhell)} (${dates(np.hellDay)})</span>`});
     if (dpms  >= 0) events.push({d: dpms,  html: `<span class="event-pill pms">🌕 PMS ${when(dpms)} (${dates(np.pmsStart)})</span>`});
     if (dper  >= 0) events.push({d: dper,  html: `<span class="event-pill period">🩸 Periode ${when(dper)} (${dates(np.start)})</span>`});
 
@@ -1717,8 +1826,8 @@ function renderStats() {
   if (cycles.length < 1) {
     document.getElementById('stats-grid').innerHTML = '<p style="color:var(--text-light);font-size:.85rem;grid-column:1/-1;text-align:center;padding:20px 0">Noch nicht genug Daten</p>';
     requestAnimationFrame(() => {
-      drawNormalChart('chart-cycle',    'chart-cycle-info',    [], '#dc143c','#a00e2b','T', POPULATION.cycle.mean,    POPULATION.cycle.std);
-      drawNormalChart('chart-duration', 'chart-duration-info', [], '#dc143c','#a00e2b','T', POPULATION.duration.mean, POPULATION.duration.std);
+      drawNormalChart('chart-cycle',    'chart-cycle-info',    [], curve1(),curve2(),'T', POPULATION.cycle.mean,    POPULATION.cycle.std);
+      drawNormalChart('chart-duration', 'chart-duration-info', [], curve1(),curve2(),'T', POPULATION.duration.mean, POPULATION.duration.std);
     });
     return;
   }
@@ -1760,8 +1869,8 @@ function renderStats() {
   `).join('') + note;
 
   requestAnimationFrame(() => {
-    drawNormalChart('chart-cycle',    'chart-cycle-info',    lengths,   '#dc143c','#a00e2b','T', POPULATION.cycle.mean,    POPULATION.cycle.std,    lastCycleLen);
-    drawNormalChart('chart-duration', 'chart-duration-info', durations, '#dc143c','#a00e2b','T', POPULATION.duration.mean, POPULATION.duration.std, lastDuration);
+    drawNormalChart('chart-cycle',    'chart-cycle-info',    lengths,   curve1(),curve2(),'T', POPULATION.cycle.mean,    POPULATION.cycle.std,    lastCycleLen);
+    drawNormalChart('chart-duration', 'chart-duration-info', durations, curve1(),curve2(),'T', POPULATION.duration.mean, POPULATION.duration.std, lastDuration);
   });
 }
 
@@ -1891,7 +2000,7 @@ function askConfirm({ title = 'Bist du sicher?', message = '', okLabel = 'Lösch
   document.getElementById('confirm-title').textContent = title;
   document.getElementById('confirm-msg').textContent = message;
   ok.textContent = okLabel;
-  ok.style.background = danger ? '#a00e2b' : 'var(--rose)';
+  ok.style.background = danger ? 'var(--danger)' : 'var(--rose)';
   openOverlay('confirm-overlay');
   ok.focus();
 }
@@ -2222,7 +2331,7 @@ function renderSettings() {
   if (!el) return;
   if (swRegistrationFailed) {
     el.textContent = '⚠️ Service Worker konnte nicht geladen werden – Offline-Modus und Benachrichtigungen sind deaktiviert';
-    el.style.color = '#a00e2b';
+    el.style.color = 'var(--danger-ink)';
   } else if (!('Notification' in window)) {
     el.textContent = '⚠️ Benachrichtigungen werden von diesem Browser nicht unterstützt';
   } else if (Notification.permission === 'granted') {
@@ -2230,7 +2339,7 @@ function renderSettings() {
     el.style.color = 'var(--text-light)';
   } else if (Notification.permission === 'denied') {
     el.textContent = '🚫 Benachrichtigungen blockiert – bitte in den Browser-Einstellungen erlauben';
-    el.style.color = '#a00e2b';
+    el.style.color = 'var(--danger-ink)';
   } else {
     el.textContent = '🔔 Noch keine Berechtigung – Benachrichtigungen aktivieren um Warnungen zu erhalten';
     el.style.color = 'var(--text-light)';

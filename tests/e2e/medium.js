@@ -325,6 +325,76 @@ const SEED = {
   check('Chart-Tinte kontrastreich im Dark Mode (>=4.5:1)', darkContrast >= 4.5, 'ratio=' + darkContrast.toFixed(2));
   check('Chart-Tinte kontrastreich im Light Mode (>=4.5:1)', lightContrast >= 4.5, 'ratio=' + lightContrast.toFixed(2));
 
+  // ── Kontrast jedes sichtbaren Textes gegen seinen tatsaechlichen Hintergrund.
+  //    Der Dark Mode war nicht an einer Stelle kaputt, sondern an einem Dutzend:
+  //    Kalenderzellen, die nur einen Hintergrund setzten und die Tinte erbten,
+  //    Akzentfarben aus dem Light-Theme, hartkodierte Hex-Werte in Inline-Styles.
+  //    Einzelchecks haetten die naechste Stelle wieder durchgelassen — deshalb
+  //    faehrt diese Pruefung ueber jeden Textknoten der ganzen App.
+  const sweep = async scheme => {
+    const c = await browser.newContext({ timezoneId: 'Europe/Berlin', colorScheme: scheme });
+    const p = await c.newPage();
+    await p.addInitScript(v => localStorage.setItem('crimson-tide-tracker', v), JSON.stringify(SEED));
+    await p.goto(U);
+    await p.waitForTimeout(900);
+    for (const t of await p.$$('.tab')) { await t.click(); await p.waitForTimeout(250); }
+    const bad = await p.evaluate(() => {
+      const rl = rgb => {
+        const [r, g, b] = rgb.match(/[\d.]+/g).slice(0, 3).map(v => v / 255)
+          .map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const cr = (a, b) => { const [x, y] = [a, b].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+      // The nearest ancestor that actually paints something opaque enough to
+      // read against — a coloured cell inside a card inside the page.
+      const bgOf = el => {
+        for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+          const a = getComputedStyle(n).backgroundColor.match(/[\d.]+/g);
+          if (a && (a.length < 4 || parseFloat(a[3]) > 0.6)) return getComputedStyle(n).backgroundColor;
+        }
+        return getComputedStyle(document.body).backgroundColor;
+      };
+      document.querySelectorAll('.section').forEach(s => s.classList.add('active'));
+      const out = [];
+      document.querySelectorAll('body *').forEach(el => {
+        const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join('');
+        if (!own) return;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) return;
+        const r = cr(rl(cs.color), rl(bgOf(el)));
+        if (r < 4.5) out.push(`${el.className || el.tagName} ${r.toFixed(2)}:1 (${cs.color} auf ${bgOf(el)})`);
+      });
+      return [...new Set(out)];
+    });
+    await c.close();
+    return bad;
+  };
+  const darkBad = await sweep('dark');
+  check('jeder Text im Dark Mode >= 4.5:1', darkBad.length === 0, darkBad.slice(0, 8).join('\n           '));
+
+  // Eine eingefaerbte Kalenderzelle muss ihre Tinte selbst setzen. Erbt sie
+  // --text, steht im Dark Mode Weiss auf Pastell.
+  {
+    const c = await browser.newContext({ timezoneId: 'Europe/Berlin', colorScheme: 'dark' });
+    const p = await c.newPage();
+    await p.addInitScript(v => localStorage.setItem('crimson-tide-tracker', v), JSON.stringify(SEED));
+    await p.goto(U);
+    await p.waitForTimeout(900);
+    const cells = await p.evaluate(() => {
+      document.querySelector('[data-tab="calendar"]').click();
+      const text = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+      const toRgb = h => { const m = h.replace('#', ''); return 'rgb(' + [0, 2, 4].map(i => parseInt(m.slice(i, i + 2), 16)).join(', ') + ')'; };
+      const inherited = toRgb(text);
+      return [...document.querySelectorAll('.cal-day')]
+        .filter(d => getComputedStyle(d).backgroundColor !== 'rgba(0, 0, 0, 0)')
+        .filter(d => getComputedStyle(d).color === inherited)
+        .map(d => d.className);
+    });
+    check('keine eingefaerbte Kalenderzelle erbt die Standardtinte',
+      cells.length === 0, [...new Set(cells)].join(' | '));
+    await c.close();
+  }
+
   // ══ Regression ══
   console.log('\n=== Regression ===');
   {
