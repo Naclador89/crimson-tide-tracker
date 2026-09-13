@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.5.0">
+  <meta name="app-version" content="1.6.0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -1394,11 +1394,26 @@ function renderHome() {
     const dov   = diffDays(t, np.ovulation);
     const dper  = diffDays(t, np.start);
 
+    // Every one of these is derived from the same predicted start, so they all
+    // carry the same uncertainty. Showing a hard date for something the data
+    // cannot pin down that precisely was the old behaviour; with enough
+    // recorded cycles the spread is shown instead.
+    const { spread } = CycleCore.calcCycleSpread(cycles);
+    const when  = d  => CycleCore.inDaysRange(d, spread);
+    const dates = ds => spread
+      ? fmtRange(dateStr(addDays(ds, -spread)), dateStr(addDays(ds, spread)))
+      : fmtDate(ds);
+
     const events = [];
-    if (dov   >= 0) events.push({d: dov,   html: `<span class="event-pill ovulation">🌿 Eisprung in ${dov} Tagen</span>`});
-    if (dhell >= 0) events.push({d: dhell, html: `<span class="event-pill" style="background:#ffe0e0;color:#8a0000">😤 Hell Day in ${dhell} Tagen (${fmtDate(np.hellDay)})</span>`});
-    if (dpms  >= 0) events.push({d: dpms,  html: `<span class="event-pill pms">🌕 PMS in ${dpms} Tagen (${fmtDate(np.pmsStart)})</span>`});
-    if (dper  >= 0) events.push({d: dper,  html: `<span class="event-pill period">🩸 Periode in ${dper} Tagen (${fmtDate(np.start)})</span>`});
+    if (dov   >= 0) events.push({d: dov,   html: `<span class="event-pill ovulation">🌿 Eisprung ${when(dov)}</span>`});
+    if (dhell >= 0) events.push({d: dhell, html: `<span class="event-pill" style="background:#ffe0e0;color:#8a0000">😤 Hell Day ${when(dhell)} (${dates(np.hellDay)})</span>`});
+    if (dpms  >= 0) events.push({d: dpms,  html: `<span class="event-pill pms">🌕 PMS ${when(dpms)} (${dates(np.pmsStart)})</span>`});
+    if (dper  >= 0) events.push({d: dper,  html: `<span class="event-pill period">🩸 Periode ${when(dper)} (${dates(np.start)})</span>`});
+
+    // Say once where the range comes from, rather than on every pill.
+    if (spread) events.push({d: Infinity, html:
+      `<span style="font-size:.72rem;color:var(--text-light);padding:2px 4px">`
+      + `Spanne aus der Schwankung deiner letzten Zyklen (±${spread} ${spread === 1 ? 'Tag' : 'Tage'})</span>`});
 
     events.sort((a, b) => a.d - b.d);
     evHtml = events.map(e => e.html).join('');
@@ -1708,12 +1723,9 @@ function renderStats() {
     return;
   }
 
-  // Only consecutive gaps within plausible range (skipped months excluded)
-  const lengths = [];
-  for (let i=1;i<cycles.length;i++) {
-    const gap = diffDays(cycles[i-1].start, cycles[i].start);
-    if (gap >= MIN_CYCLE && gap <= MAX_CYCLE) lengths.push(gap);
-  }
+  // Same list the averages and the spread are built from — one definition of
+  // "a plausible cycle length", not a second copy of the rule.
+  const lengths = cycleGaps(cycles);
   const durations = cycles.filter(c=>c.end).map(c=>diffDays(c.start,c.end)+1);
 
   // Last recorded values for the red marker
@@ -1723,10 +1735,13 @@ function renderStats() {
   const avgLen = lengths.length ? Math.round(lengths.reduce((a,b)=>a+b,0)/lengths.length) : '–';
   const avgDur = durations.length ? Math.round(durations.reduce((a,b)=>a+b,0)/durations.length) : '–';
 
+  const { sd, n: nGaps } = CycleCore.calcCycleSpread(cycles);
   const grid = [
     {val: cycles.length,                    label:'Eingetragene Zyklen'},
     {val: avgLen!=='–' ? avgLen+'T' : '–',  label:'Ø Zykluslänge'},
     {val: avgDur!=='–' ? avgDur+'T' : '–',  label:'Ø Periodendauer'},
+    {val: nGaps >= 2 ? '±' + (Math.round(sd*10)/10) + 'T' : '–',
+     label: 'Schwankung Zyklus'},
   ];
 
   // Gaps outside MIN_CYCLE..MAX_CYCLE are treated as a skipped month and left

@@ -71,6 +71,41 @@ function fmtDate(s) {
   return d.toLocaleDateString('de-DE',{day:'2-digit',month:'short',year:'numeric'});
 }
 
+// A date range, collapsed so the shared parts are not repeated:
+//   same month  →  23.–27. Sep. 2026
+//   same year   →  28. Sep. – 02. Okt. 2026
+//   otherwise   →  28. Dez. 2026 – 03. Jan. 2027
+function fmtRange(a, b) {
+  if (!a || !b || a === b) return fmtDate(a || b);
+  const da = parseDate(a), db = parseDate(b);
+  const day = d => String(d.getDate()).padStart(2, '0');
+  // Derive the short form from fmtDate rather than a second toLocaleDateString:
+  // ICU abbreviates the month differently depending on which other fields are
+  // present ("Sep" alone, "Sept." alongside a year).
+  const withoutYear = ds => fmtDate(ds).replace(/\s*\d{4}$/, '');
+  if (da.getFullYear() === db.getFullYear()) {
+    if (da.getMonth() === db.getMonth()) return `${day(da)}.–${fmtDate(b)}`;
+    return `${withoutYear(a)} – ${fmtDate(b)}`;
+  }
+  return `${fmtDate(a)} – ${fmtDate(b)}`;
+}
+
+// "heute" / "morgen" / "in n Tagen", and the same with a spread applied.
+// The old wording produced "in 0 Tagen" and "in 1 Tagen".
+function inDays(d) {
+  if (d <= 0) return 'heute';
+  if (d === 1) return 'morgen';
+  return `in ${d} Tagen`;
+}
+
+function inDaysRange(d, spread) {
+  if (!spread) return inDays(d);
+  const lo = Math.max(0, d - spread), hi = d + spread;
+  if (lo === 0) return `heute bis in ${hi} Tagen`;
+  if (lo === hi) return inDays(lo);
+  return `in ${lo}–${hi} Tagen`;
+}
+
 // Today as 'YYYY-MM-DD' in the viewer's own timezone.
 function todayStr() { return dateStr(new Date()); }
 
@@ -82,15 +117,53 @@ function sortCycles(cycles) {
 // ══════════════════════════════════════════════════════════
 // AVERAGES
 // ══════════════════════════════════════════════════════════
-function calcAvgCycle(cycles) {
-  if (cycles.length < 2) return 28;
-  const validGaps = [];
+// The distances between consecutive recorded starts, minus the implausible
+// ones — a gap outside MIN_CYCLE..MAX_CYCLE means a month went unrecorded, not
+// that the cycle was that long. Everything statistical builds on this list, so
+// it lives in one place.
+function cycleGaps(cycles) {
+  const gaps = [];
   for (let i = 1; i < cycles.length; i++) {
     const gap = diffDays(cycles[i-1].start, cycles[i].start);
-    if (gap >= MIN_CYCLE && gap <= MAX_CYCLE) validGaps.push(gap);
+    if (gap >= MIN_CYCLE && gap <= MAX_CYCLE) gaps.push(gap);
   }
-  if (!validGaps.length) return 28;
-  return Math.round(validGaps.reduce((a, b) => a + b, 0) / validGaps.length);
+  return gaps;
+}
+
+function calcAvgCycle(cycles) {
+  const gaps = cycleGaps(cycles);
+  if (!gaps.length) return 28;
+  return Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length);
+}
+
+// How much the cycle actually varies, as a whole number of days.
+//
+//   { n, mean, sd, spread }
+//
+// sd is the sample standard deviation (n-1), so a single gap yields no spread
+// at all rather than a confident zero. spread is sd rounded for display and is
+// what the prediction is widened by; it needs at least three gaps, because two
+// measurements say almost nothing about variability.
+//
+// A prediction of "day X" was always a point estimate dressed up as a fact.
+// mean ± sd is the honest version: for a typical cycle it covers roughly two
+// thirds of the outcomes.
+const MIN_GAPS_FOR_SPREAD = 3;
+
+function calcCycleSpread(cycles) {
+  const gaps = cycleGaps(cycles);
+  const n = gaps.length;
+  if (n < 2) return { n, mean: n ? gaps[0] : 28, sd: 0, spread: 0 };
+
+  const mean = gaps.reduce((a, b) => a + b, 0) / n;
+  const variance = gaps.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1);
+  const sd = Math.sqrt(variance);
+  return {
+    n,
+    mean,
+    sd,
+    spread: n >= MIN_GAPS_FOR_SPREAD ? Math.round(sd) : 0,
+  };
 }
 
 function calcAvgPeriod(cycles) {
@@ -226,8 +299,9 @@ function normalPDF(x, mean, std) {
 return {
   MIN_CYCLE, MAX_CYCLE, PMS_DAYS, DATE_RE, ID_RE,
   isValidCycle,
-  dateStr, parseDate, addDays, diffDays, fmtDate, todayStr,
-  sortCycles, calcAvgCycle, calcAvgPeriod,
+  dateStr, parseDate, addDays, diffDays, fmtDate, fmtRange, inDays, inDaysRange, todayStr,
+  sortCycles, cycleGaps, calcAvgCycle, calcAvgPeriod, calcCycleSpread,
+  MIN_GAPS_FOR_SPREAD,
   buildPhases, makeDayClassifier, classifyDay, normalPDF,
 };
 });

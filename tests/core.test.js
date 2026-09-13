@@ -10,10 +10,10 @@ const assert = require('node:assert');
 const core = require('../cycle-core.js');
 
 const {
-  dateStr, parseDate, addDays, diffDays, fmtDate, todayStr,
-  sortCycles, calcAvgCycle, calcAvgPeriod, buildPhases,
+  dateStr, parseDate, addDays, diffDays, fmtDate, fmtRange, inDays, inDaysRange, todayStr,
+  sortCycles, cycleGaps, calcAvgCycle, calcAvgPeriod, calcCycleSpread, buildPhases,
   makeDayClassifier, classifyDay, isValidCycle, normalPDF,
-  MIN_CYCLE, MAX_CYCLE, PMS_DAYS,
+  MIN_CYCLE, MAX_CYCLE, PMS_DAYS, MIN_GAPS_FOR_SPREAD,
 } = core;
 
 const TZ = process.env.TZ || 'system default';
@@ -150,6 +150,110 @@ describe('averages', () => {
   test('period duration is inclusive of both days', () => {
     assert.equal(calcAvgPeriod([{ id: 'a', start: '2026-09-01', end: '2026-09-01' }]), 1);
     assert.equal(calcAvgPeriod([{ id: 'a', start: '2026-09-01', end: '2026-09-04' }]), 4);
+  });
+});
+
+describe('cycle spread', () => {
+  const mk = starts => starts.map((s, i) => ({ id: 'c' + i, start: s, end: null }));
+
+  test('gaps are the distances between consecutive starts', () => {
+    assert.deepEqual(cycleGaps(CYCLES), [28, 28, 28]);
+    assert.deepEqual(cycleGaps([]), []);
+    assert.deepEqual(cycleGaps([CYCLES[0]]), []);
+  });
+
+  test('an implausible gap is left out of the list, not counted as a long cycle', () => {
+    const gaps = cycleGaps(mk(['2026-01-05', '2026-02-02', '2026-08-28']));
+    assert.deepEqual(gaps, [28], '207 days is a skipped month');
+  });
+
+  test('a perfectly regular cycle has no spread', () => {
+    const s = calcCycleSpread(CYCLES);
+    assert.equal(s.n, 3);
+    assert.equal(s.mean, 28);
+    assert.equal(s.sd, 0);
+    assert.equal(s.spread, 0, 'no range should be shown when there is nothing to spread');
+  });
+
+  test('an irregular cycle reports a spread', () => {
+    // gaps 24, 36, 24, 35 → mean 29.75, sample sd ≈ 6.65
+    const s = calcCycleSpread(mk(['2026-06-01', '2026-06-25', '2026-07-31', '2026-08-24', '2026-09-28']));
+    assert.equal(s.n, 4);
+    assert.ok(Math.abs(s.mean - 29.75) < 1e-9, String(s.mean));
+    assert.ok(Math.abs(s.sd - 6.652) < 0.01, String(s.sd));
+    assert.equal(s.spread, 7);
+  });
+
+  test('uses the sample standard deviation, not the population one', () => {
+    // gaps 26 and 30: population sd is 2, sample sd is √8 ≈ 2.83
+    const s = calcCycleSpread(mk(['2026-01-01', '2026-01-27', '2026-02-26']));
+    assert.ok(Math.abs(s.sd - Math.sqrt(8)) < 1e-9, String(s.sd));
+  });
+
+  test('too little data yields no spread at all', () => {
+    // Two gaps can differ wildly and still say nothing about variability.
+    const two = calcCycleSpread(mk(['2026-01-01', '2026-01-27', '2026-02-26']));
+    assert.equal(two.n, 2);
+    assert.ok(two.sd > 0, 'the deviation is computed');
+    assert.equal(two.spread, 0, 'but it is not shown below the threshold');
+
+    assert.equal(calcCycleSpread(mk(['2026-01-01', '2026-01-29'])).spread, 0);
+    assert.equal(calcCycleSpread([]).spread, 0);
+    assert.equal(calcCycleSpread([]).mean, 28, 'falls back like calcAvgCycle');
+  });
+
+  test('the threshold is what the constant says', () => {
+    const starts = ['2026-01-01'];
+    for (let i = 1; i <= MIN_GAPS_FOR_SPREAD; i++) {
+      starts.push(dateStr(addDays(starts[i - 1], 26 + (i % 3) * 3)));
+    }
+    assert.equal(calcCycleSpread(mk(starts.slice(0, MIN_GAPS_FOR_SPREAD))).n, MIN_GAPS_FOR_SPREAD - 1);
+    assert.equal(calcCycleSpread(mk(starts.slice(0, MIN_GAPS_FOR_SPREAD))).spread, 0);
+    assert.ok(calcCycleSpread(mk(starts)).spread > 0, 'one more gap and the range appears');
+  });
+
+  test('mean agrees with calcAvgCycle', () => {
+    for (const c of [CYCLES, mk(['2026-06-01', '2026-06-25', '2026-07-31', '2026-08-24'])]) {
+      assert.equal(Math.round(calcCycleSpread(c).mean), calcAvgCycle(c));
+    }
+  });
+});
+
+describe('wording', () => {
+  test('day counts read like German, not like a counter', () => {
+    assert.equal(inDays(0), 'heute');
+    assert.equal(inDays(1), 'morgen');
+    assert.equal(inDays(2), 'in 2 Tagen');
+    assert.equal(inDays(-3), 'heute', 'a past date never reads as negative');
+  });
+
+  test('a spread turns the count into a range', () => {
+    assert.equal(inDaysRange(13, 2), 'in 11–15 Tagen');
+    assert.equal(inDaysRange(13, 0), 'in 13 Tagen', 'no spread, no range');
+    assert.equal(inDaysRange(5, 0), 'in 5 Tagen');
+  });
+
+  test('a range that would start in the past is clamped', () => {
+    assert.equal(inDaysRange(2, 3), 'heute bis in 5 Tagen');
+    assert.equal(inDaysRange(1, 1), 'heute bis in 2 Tagen');
+  });
+
+  test('date ranges collapse what the two ends share', () => {
+    assert.match(fmtRange('2026-09-23', '2026-09-27'), /^23\.–27\./);
+    assert.equal((fmtRange('2026-09-23', '2026-09-27').match(/2026/g) || []).length, 1);
+    assert.equal((fmtRange('2026-09-28', '2026-10-02').match(/2026/g) || []).length, 1);
+    assert.equal((fmtRange('2026-12-28', '2027-01-03').match(/20\d\d/g) || []).length, 2);
+  });
+
+  test('the month is abbreviated the same way on both ends', () => {
+    const r = fmtRange('2026-09-28', '2026-10-02');
+    const months = r.match(/[A-Za-zä]+\./g) || [];
+    assert.ok(months.every(m => m.endsWith('.')), r);
+  });
+
+  test('a degenerate range is just a date', () => {
+    assert.equal(fmtRange('2026-09-25', '2026-09-25'), fmtDate('2026-09-25'));
+    assert.equal(fmtRange(null, '2026-09-25'), fmtDate('2026-09-25'));
   });
 });
 

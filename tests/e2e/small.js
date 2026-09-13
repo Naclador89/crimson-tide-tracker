@@ -445,7 +445,7 @@ const SEED = {
     });
     check('alle Tabs ohne Fehler', errs.length === 0, errs.join(' | '));
     check('Inhalte vollstaendig',
-      st.painted > 0 && st.rows === 4 && st.stats === 3 && st.canvas && st.events > 0 && st.legend === 6,
+      st.painted > 0 && st.rows === 4 && st.stats === 4 && st.canvas && st.events > 0 && st.legend === 6,
       JSON.stringify(st));
     check('Badge gesetzt', st.badge.length > 3, st.badge);
     await c.close();

@@ -77,6 +77,14 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
 - **Tagesklassifikation**: `classifyDay()` bzw. `makeDayClassifier()` sind die
   einzige Quelle dafür, welche Phase ein Tag hat. Kalender, Zeitstrahl und das
   Status-Badge greifen alle darauf zu. Keine zweite Implementierung danebenbauen.
+- **Zykluslängen**: `cycleGaps()` ist die einzige Stelle, die entscheidet, was
+  als plausible Zykluslänge zählt. Mittelwert, Schwankung und Statistiktab
+  bauen alle darauf auf.
+- **Prognose**: Ab drei Abständen wird die Vorhersage als Spanne gezeigt
+  (`calcCycleSpread`, Stichproben-Standardabweichung). Darunter bleibt es bei
+  einem Tag — zwei Messwerte sagen über Schwankung nichts aus. Eine Spanne von
+  ±7 Tagen sieht unbrauchbar aus, ist aber ehrlicher als ein exaktes Datum, das
+  die Daten nicht hergeben.
 - **Benachrichtigungen** erscheinen, wenn die App geöffnet oder in den
   Vordergrund geholt wird — nicht während sie geschlossen ist. Das ist eine
   Grenze von reinem Static-Hosting, kein Fehler: ein geschlossenes Gerät kann

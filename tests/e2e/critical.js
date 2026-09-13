@@ -282,7 +282,7 @@ const SEED = {
     canvasPainted: (() => { const c = document.getElementById('timeline-canvas'); return c.width > 100; })(),
   }));
   check('alle Tabs rendern ohne Fehler', pe5.length === 0, pe5.join('|'));
-  check('Kalender/Liste/Statistik gefuellt', reg5.calDays >= 28 && reg5.rows === 4 && reg5.stats === 3, JSON.stringify(reg5));
+  check('Kalender/Liste/Statistik gefuellt', reg5.calDays >= 28 && reg5.rows === 4 && reg5.stats === 4, JSON.stringify(reg5));
   check('Zeitstrahl gezeichnet', reg5.canvasPainted, JSON.stringify(reg5));
   check('Ereignis-Pillen vorhanden', reg5.events > 0, JSON.stringify(reg5));
 

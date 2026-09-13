@@ -196,6 +196,83 @@ const SEED = {
     await c.close();
   }
 
+  // ══ Spread instead of a point prediction ══
+  console.log('\n=== Prognose mit Spanne ===');
+  {
+    // Regular cycles: nothing to spread, so the old exact wording stands.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' });
+    const pills = await p.evaluate(() =>
+      [...document.querySelectorAll('#next-events .event-pill')].map(e => e.textContent.trim()));
+    check('regelmaessiger Zyklus zeigt weiter einen Tag',
+      pills.some(t => /Periode in \d+ Tagen/.test(t)) && !pills.some(t => /–/.test(t)),
+      JSON.stringify(pills));
+    check('kein Spannen-Hinweis ohne Schwankung',
+      !(await p.evaluate(() => document.getElementById('next-events').textContent.includes('Spanne'))));
+    await c.close();
+  }
+
+  {
+    // Irregular: gaps 24, 36, 24, 35 → sd ≈ 6.65 → ±7 days.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, {
+      cycles: [
+        { id: 'a', start: '2026-06-01', end: '2026-06-05' },
+        { id: 'b', start: '2026-06-25', end: '2026-06-29' },
+        { id: 'c', start: '2026-07-31', end: '2026-08-04' },
+        { id: 'd', start: '2026-08-24', end: '2026-08-28' },
+        { id: 'e', start: '2026-09-28', end: '2026-10-02' },
+      ], settings: { warnDays: 3 },
+    });
+    const r = await p.evaluate(() => ({
+      spread: CycleCore.calcCycleSpread(sortedCycles()).spread,
+      pills: [...document.querySelectorAll('#next-events .event-pill')].map(e => e.textContent.trim()),
+      note: document.getElementById('next-events').textContent,
+    }));
+    check('unregelmaessiger Zyklus liefert eine Spanne', r.spread === 7, 'spread=' + r.spread);
+    check('jede Pille nennt eine Tagesspanne',
+      r.pills.length > 0 && r.pills.every(t => /in \d+–\d+ Tagen|heute bis in \d+ Tagen/.test(t)),
+      JSON.stringify(r.pills));
+    check('Datumsangaben sind ebenfalls Spannen',
+      r.pills.filter(t => /\(/.test(t)).every(t => /\(\d{2}\.[–\s]/.test(t)),
+      JSON.stringify(r.pills));
+    check('Herkunft der Spanne wird einmal erklaert',
+      /Spanne aus der Schwankung/.test(r.note) && (r.note.match(/Spanne aus/g) || []).length === 1,
+      r.note.slice(-90));
+    await c.close();
+  }
+
+  {
+    // Two gaps are not enough to claim anything about variability.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, {
+      cycles: [
+        { id: 'a', start: '2026-07-20', end: '2026-07-24' },
+        { id: 'b', start: '2026-08-15', end: '2026-08-19' },
+        { id: 'c', start: '2026-09-14', end: '2026-09-18' },
+      ], settings: { warnDays: 3 },
+    });
+    const r = await p.evaluate(() => ({
+      n: CycleCore.calcCycleSpread(sortedCycles()).n,
+      sd: CycleCore.calcCycleSpread(sortedCycles()).sd,
+      spread: CycleCore.calcCycleSpread(sortedCycles()).spread,
+      text: document.getElementById('next-events').textContent,
+    }));
+    check('bei zwei Luecken wird trotz Abweichung keine Spanne behauptet',
+      r.n === 2 && r.sd > 0 && r.spread === 0, JSON.stringify(r));
+    check('und kein Spannen-Hinweis erscheint', !/Spanne aus/.test(r.text));
+    await c.close();
+  }
+
+  {
+    // Statistics tab reports the variation as its own figure.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' });
+    const boxes = await p.evaluate(() => {
+      document.querySelector('[data-tab="stats"]').click();
+      return [...document.querySelectorAll('.stat-box')].map(b => b.textContent.replace(/\s+/g, ' ').trim());
+    });
+    check('Statistik zeigt die Schwankung als eigene Kennzahl',
+      boxes.length === 4 && boxes.some(b => /Schwankung/.test(b)), JSON.stringify(boxes));
+    await c.close();
+  }
+
   // ══ M6 — dark mode charts ══
   console.log('\n=== M6  Dark Mode ===');
   const readChart = async scheme => {
@@ -274,7 +351,7 @@ const SEED = {
     }));
     check('alle Tabs ohne Fehler', pe.length === 0, pe.join(' | '));
     check('Kalender/Liste/Statistik/Zeitstrahl gefuellt',
-      st.calDays >= 28 && st.painted > 0 && st.rows === 4 && st.stats === 3 && st.canvas, JSON.stringify(st));
+      st.calDays >= 28 && st.painted > 0 && st.rows === 4 && st.stats === 4 && st.canvas, JSON.stringify(st));
     check('Badge und Ereignisse vorhanden', st.badge.length > 3 && st.events > 0, JSON.stringify(st));
     await c.close();
   }
