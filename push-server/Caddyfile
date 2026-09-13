@@ -1,0 +1,11 @@
+# Caddy fetches and renews the certificate by itself; nothing else to configure.
+{$PUSH_DOMAIN} {
+	encode gzip
+	reverse_proxy relay:8080
+
+	# The relay logs no IPs on purpose (see server.js). Keep it that way here.
+	log {
+		output stdout
+		format console
+	}
+}

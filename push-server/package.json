@@ -7,10 +7,14 @@
   "scripts": {
     "start": "node server.js",
     "keys": "node keys.js",
-    "test": "node --test test.js"
+    "test": "node --test test.js integration.test.js",
+    "test:unit": "node --test test.js",
+    "test:integration": "node --test integration.test.js"
   },
   "dependencies": {
     "web-push": "^3.6.7"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

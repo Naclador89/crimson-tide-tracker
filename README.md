@@ -15,7 +15,7 @@ Die App wird statisch ausgeliefert (GitHub Pages), es gibt keinen Build-Schritt.
 | `cycle-core.js` | Reine Logik: Datumsrechnung, Mittelwerte, Phasenprojektion, Tagesklassifikation. Ohne DOM, ohne Storage — deshalb im Browser **und** in Node ladbar |
 | `sw.js` | Service Worker: Offline-Cache und Update-Erkennung |
 | `manifest.webmanifest` | PWA-Manifest |
-| `push-server/` | Optionaler Dienst für Benachrichtigungen bei geschlossener App. Die App funktioniert ohne ihn |
+| `push-server/` | Optionaler Dienst für Benachrichtigungen bei geschlossener App, samt Dockerfile, Compose-Stack und systemd-Unit. Die App funktioniert ohne ihn |
 | `tests/` | Unit- und Browsertests |
 
 `cycle-core.js` muss **vor** dem Inline-Skript geladen werden; es veröffentlicht
@@ -38,7 +38,7 @@ prüft das.
 tests/run.sh          # alles
 tests/run.sh unit     # nur Unit-Tests, braucht keinen Browser
 tests/run.sh e2e      # nur Browsertests
-cd push-server && npm test    # der optionale Dienst
+cd push-server && npm test    # der optionale Dienst (Unit + Integration)
 ```
 
 **Unit** (`tests/core.test.js`, `node --test`) prüft `cycle-core.js` und läuft

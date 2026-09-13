@@ -1,0 +1,44 @@
+# Push relay behind Caddy, which obtains and renews a certificate on its own.
+# The browser refuses a plain-HTTP relay, so TLS is not optional here.
+#
+#   1. cp .env.example .env   and fill it in  (npm run keys)
+#   2. put your domain in PUSH_DOMAIN inside .env
+#   3. point that domain's A/AAAA record at this host
+#   4. docker compose up -d
+#
+services:
+  relay:
+    build: .
+    restart: unless-stopped
+    environment:
+      VAPID_PUBLIC: "${VAPID_PUBLIC:?run npm run keys and put the pair into .env}"
+      VAPID_PRIVATE: "${VAPID_PRIVATE:?run npm run keys and put the pair into .env}"
+      VAPID_SUBJECT: "${VAPID_SUBJECT:?a mailto or https contact URL is required}"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://crimson-tide-tracker.leiding.net}"
+      TRUST_PROXY: "1"          # Caddy sets X-Forwarded-For
+      TICK_SECONDS: "${TICK_SECONDS:-30}"
+      MAX_ENTRIES: "${MAX_ENTRIES:-10000}"
+      RATE_PER_MIN: "${RATE_PER_MIN:-20}"
+    volumes:
+      - relay-data:/data
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [relay]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUSH_DOMAIN: "${PUSH_DOMAIN:?the domain this relay answers on, for example push.example.net}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # certificates — losing this re-requests them
+      - caddy-config:/config
+
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

@@ -42,6 +42,11 @@ const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'subscriptions.j
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 const TICK_MS = Number(process.env.TICK_SECONDS || 30) * 1000;
 const MAX_BODY = 8 * 1024;
+const MAX_ENTRIES = Number(process.env.MAX_ENTRIES || 10000);
+const RATE_PER_MIN = Number(process.env.RATE_PER_MIN || 20);
+// Only honour X-Forwarded-For when something trustworthy sets it; otherwise the
+// header is just a client-supplied string and rate limiting becomes decorative.
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE;
@@ -52,6 +57,10 @@ if (!VAPID_PUBLIC || !VAPID_PRIVATE || !VAPID_SUBJECT) {
   process.exit(1);
 }
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+
+if (ALLOWED_ORIGIN === '*') {
+  console.warn('ALLOWED_ORIGIN is "*" — set it to the app origin before exposing this publicly.');
+}
 
 // ── Storage ────────────────────────────────────────────────
 // A JSON file keyed by endpoint. Small enough that rewriting it wholesale is
@@ -108,7 +117,47 @@ function validFireAt(t) {
   return Number.isFinite(t) && t > Date.now() - 3600_000 && t < Date.now() + MAX_AHEAD_MS;
 }
 
+// ── Abuse control ──────────────────────────────────────────
+// This is a public endpoint: anyone who finds it can post subscriptions. The
+// damage potential is low (an empty push to an endpoint the poster already
+// controls), but filling the store or the disk is not, so both are bounded.
+
+const hits = new Map();   // client key → timestamps within the window
+
+function clientKey(req) {
+  if (TRUST_PROXY) {
+    const fwd = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (fwd) return fwd;
+  }
+  return req.socket.remoteAddress || 'unknown';
+}
+
+function rateLimited(req) {
+  const key = clientKey(req);
+  const now = Date.now();
+  const recent = (hits.get(key) || []).filter(t => now - t < 60_000);
+  recent.push(now);
+  hits.set(key, recent);
+  return recent.length > RATE_PER_MIN;
+}
+
+// Drop idle buckets so the map cannot grow without bound.
+setInterval(() => {
+  const cutoff = Date.now() - 60_000;
+  for (const [key, times] of hits) {
+    const recent = times.filter(t => t > cutoff);
+    if (recent.length) hits.set(key, recent); else hits.delete(key);
+  }
+}, 60_000).unref?.();
+
 // ── HTTP ───────────────────────────────────────────────────
+
+// Method, path, status, duration — deliberately no IP and no push endpoint.
+// Logging either would put back exactly the data this service avoids storing.
+function logRequest(req, status, started) {
+  console.log('%s %s %d %dms', req.method, new URL(req.url, 'http://x').pathname,
+    status, Date.now() - started);
+}
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
@@ -148,8 +197,15 @@ function readBody(req) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  const started = Date.now();
+  res.on('finish', () => logRequest(req, res.statusCode, started));
 
   if (req.method === 'OPTIONS') { cors(res); return res.writeHead(204).end(); }
+
+  if (req.method === 'POST' && rateLimited(req)) {
+    res.setHeader('Retry-After', '60');
+    return send(res, 429, { error: 'too many requests' });
+  }
 
   // The app fetches the public key so nothing has to be hardcoded in the client.
   if (req.method === 'GET' && url.pathname === '/vapid') {
@@ -168,6 +224,12 @@ const server = http.createServer(async (req, res) => {
     if (!validSubscription(body.subscription)) return send(res, 400, { error: 'invalid subscription' });
     const fireAt = Number(body.fireAt);
     if (!validFireAt(fireAt)) return send(res, 400, { error: 'invalid fireAt' });
+
+    // A known endpoint updates in place, so the cap only blocks genuinely new
+    // devices — an existing user can always reschedule.
+    if (!store.has(body.subscription.endpoint) && store.size >= MAX_ENTRIES) {
+      return send(res, 507, { error: 'capacity reached' });
+    }
 
     // Re-subscribing replaces the pending reminder rather than adding one.
     store.set(body.subscription.endpoint, { subscription: body.subscription, fireAt });
@@ -235,4 +297,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { server, tick, store, load, save, validSubscription, validFireAt };
+module.exports = { server, tick, store, load, save, validSubscription, validFireAt, hits };

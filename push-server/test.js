@@ -16,6 +16,8 @@ process.env.VAPID_PRIVATE = keys.privateKey;
 process.env.VAPID_SUBJECT = 'mailto:test@example.com';
 process.env.DATA_FILE = DATA;
 process.env.ALLOWED_ORIGIN = 'https://crimson-tide-tracker.leiding.net';
+process.env.RATE_PER_MIN = '20';
+process.env.MAX_ENTRIES = '5';
 
 const webpush = require('web-push');
 const sent = [];
@@ -38,7 +40,9 @@ after(() => {
   fs.rmSync(DATA, { force: true });
   fs.rmSync(DATA + '.tmp', { force: true });
 });
-beforeEach(() => { relay.store.clear(); sent.length = 0; nextError = null; });
+// hits too: the limiter counts across tests otherwise, and the suite makes
+// more requests per minute than any real client would.
+beforeEach(() => { relay.store.clear(); relay.hits.clear(); sent.length = 0; nextError = null; });
 
 const sub = (id = 'a') => ({
   endpoint: 'https://fcm.googleapis.com/fcm/send/' + id,
@@ -198,6 +202,46 @@ describe('scheduler', () => {
     assert.equal(sent.length, 1);
     assert.ok(sent[0].endpoint.endsWith('/a'));
     assert.equal(relay.store.size, 1, 'the later one stays');
+  });
+});
+
+describe('abuse control', () => {
+  test('rate limits repeated POSTs from one client', async () => {
+    const limit = Number(process.env.RATE_PER_MIN || 20);
+    let first429 = null;
+    for (let i = 0; i < limit + 5; i++) {
+      const r = await post('/subscribe', { subscription: sub('rl' + i), fireAt: inHours(2) });
+      if (r.status === 429 && first429 === null) first429 = i;
+    }
+    assert.equal(first429, limit, `expected the ${limit + 1}. request to be refused`);
+  });
+
+  test('a 429 names Retry-After', async () => {
+    let res;
+    for (let i = 0; i <= Number(process.env.RATE_PER_MIN || 20); i++) {
+      res = await post('/subscribe', { subscription: sub('ra' + i), fireAt: inHours(2) });
+    }
+    assert.equal(res.status, 429);
+    assert.equal(res.headers.get('retry-after'), '60');
+  });
+
+  test('GET is not rate limited, so /health stays usable', async () => {
+    for (let i = 0; i < 40; i++) await fetch(base + '/health');
+    assert.equal((await fetch(base + '/health')).status, 200);
+  });
+
+  test('refuses new devices past the capacity cap, but still updates known ones', async () => {
+    const cap = Number(process.env.MAX_ENTRIES);
+    for (let i = 0; i < cap; i++) {
+      relay.store.set('https://fcm.googleapis.com/fcm/send/fill' + i,
+        { subscription: sub('fill' + i), fireAt: inHours(5) });
+    }
+    const fresh = await post('/subscribe', { subscription: sub('newcomer'), fireAt: inHours(2) });
+    assert.equal(fresh.status, 507, 'a new endpoint must be refused when full');
+
+    const known = await post('/subscribe', { subscription: sub('fill0'), fireAt: inHours(9) });
+    assert.equal(known.status, 200, 'an existing endpoint must still be able to reschedule');
+    assert.equal(relay.store.get(sub('fill0').endpoint).fireAt > inHours(8), true);
   });
 });
 
