@@ -55,7 +55,7 @@ run_e2e() {
     return
   fi
 
-  for suite in critical medium small push; do
+  for suite in critical medium small icons; do
     echo "  ── $suite ──"
     if BASE_URL="http://localhost:$PORT" node "$ROOT/tests/e2e/$suite.js" 2>&1 | sed 's/^/    /'; then :; else FAILED=1; fi
   done

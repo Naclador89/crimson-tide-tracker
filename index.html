@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.4.0">
+  <meta name="app-version" content="1.5.0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -561,34 +561,10 @@
       <div id="notif-status" style="font-size:.78rem;color:var(--text-light);margin-top:10px"></div>
       <p style="font-size:.78rem;color:var(--text-light);margin-top:12px;line-height:1.5">
         Benachrichtigungen funktionieren auf <strong>Android</strong> (Chrome, installierte PWA) und auf <strong>iOS 16.4+</strong> nur wenn die App zum Home-Screen hinzugefügt wurde.
-        Ohne Push-Server (siehe unten) erscheint die Warnung, sobald du die App am oder nach dem Warntag öffnest.
+        Die Warnung erscheint, sobald du die App am oder nach dem Warntag öffnest.
       </p>
     </div>
 
-    <div class="card">
-      <div class="card-title"><span class="icon">📡</span>Push bei geschlossener App</div>
-      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:14px;line-height:1.6">
-        Standardmäßig verlässt <strong>nichts</strong> dieses Gerät. Wer die Warnung auch bei geschlossener App
-        bekommen will, braucht einen eigenen kleinen Server — einer liegt im Projekt unter
-        <code style="font-size:.85em">push-server/</code>.
-      </p>
-      <div style="background:var(--warm-white);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px">
-        <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-mid);margin-bottom:6px">Was der Server erfährt</div>
-        <p style="font-size:.8rem;color:var(--text-light);margin:0;line-height:1.55">
-          Nur deine Push-Adresse und <strong>einen Zeitstempel</strong> — wann er dich anstupsen soll.
-          Kein Zyklus, kein Datum, kein Text. Die Formulierung bleibt auf dem Gerät und wird erst hier
-          zusammengesetzt, wenn der leere Push ankommt.
-        </p>
-      </div>
-      <div class="form-group" style="max-width:420px;margin-bottom:14px">
-        <label for="settings-push-url">Adresse des Push-Servers</label>
-        <input type="url" id="settings-push-url" placeholder="https://push.example.net" autocomplete="off">
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <button class="quick-btn" data-action="enable-push" style="margin:0">📡 Push aktivieren</button>
-        <button class="quick-btn secondary" id="push-disable-btn" data-action="disable-push" style="margin:0;display:none">Deaktivieren</button>
-      </div>
-      <div id="push-status" style="font-size:.78rem;color:var(--text-light);margin-top:10px"></div>
     </div>
     <div class="card">
       <div class="card-title"><span class="icon">⬇️</span>Daten exportieren</div>
@@ -665,9 +641,7 @@ let state = {
   // warnDays        — days before the predicted start to warn
   // lastNotifiedFor — start date of the period the last warning was for,
   //                   so the same cycle is never announced twice
-  // pushUrl         — relay that can wake a closed device; empty = off, and
-  //                   then nothing ever leaves the device
-  settings: { warnDays: 3, lastNotifiedFor: null, pushUrl: '' }
+  settings: { warnDays: 3, lastNotifiedFor: null }
 };
 
 // ── Bindings to cycle-core.js ──
@@ -733,7 +707,6 @@ function load() {
   state.settings = {
     warnDays: Number.isFinite(warn) && warn >= 1 && warn <= 14 ? Math.round(warn) : 3,
     lastNotifiedFor: typeof s.lastNotifiedFor === 'string' ? s.lastNotifiedFor : null,
-    pushUrl: typeof s.pushUrl === 'string' ? s.pushUrl.trim() : '',
   };
 }
 
@@ -2134,7 +2107,6 @@ function renderAll() {
   // The one place that cannot forget to re-evaluate the warning — quick entry,
   // delete and import used to leave a stale alarm behind.
   checkDueNotification();
-  schedulePushSync();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2162,8 +2134,8 @@ function periodWarningMessage(days) {
 //   after a few seconds of idle time and every pending timer dies with them,
 //   so an alarm days or weeks out never fired.
 //
-//   Without a push server there is no way to wake a closed app, so the check
-//   runs whenever the app is opened or brought to the foreground. The warning
+//   Nothing can wake a closed app from a static host, so the check runs
+//   whenever the app is opened or brought to the foreground. The warning
 //   therefore appears the next time the app is opened at or after the warning
 //   date — which is honest, and said as much in the settings tab.
 //
@@ -2217,172 +2189,6 @@ function nextPredictedPeriod() {
 }
 
 // ══════════════════════════════════════════════════════════
-// WEB PUSH (optional)
-//
-// The pull-based check above only fires while the app is open. A closed device
-// can only be woken by a push service, and that needs a server — see
-// push-server/ for one. It is off unless the user enters a relay URL.
-//
-// What leaves the device when it is on: the push subscription and ONE
-// timestamp. Not the cycle, not the date, not the message. The relay sends an
-// empty push; the service worker composes the wording from PUSH_CACHE, which
-// the code below fills locally. The settings tab says as much before anyone
-// turns it on.
-// ══════════════════════════════════════════════════════════
-const PUSH_CACHE = 'ctt-push';
-const PUSH_KEY = './__push-message';
-
-function pushConfigured() {
-  return !!(state.settings.pushUrl && 'PushManager' in window && navigator.serviceWorker);
-}
-
-function pushBase() {
-  return state.settings.pushUrl.replace(/\/+$/, '');
-}
-
-// base64url → Uint8Array, the form applicationServerKey wants.
-function urlBase64ToUint8Array(base64) {
-  const padded = (base64 + '='.repeat((4 - base64.length % 4) % 4))
-    .replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(padded);
-  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
-}
-
-// The moment the warning is due: warnDays before the predicted start, at noon.
-function nextWarningTime() {
-  const next = nextPredictedPeriod();
-  if (!next) return null;
-  const at = new Date(next.start + 'T00:00:00');
-  at.setDate(at.getDate() - (state.settings.warnDays || 3));
-  at.setHours(12, 0, 0, 0);
-  return at.getTime() <= Date.now() ? null : { fireAt: at.getTime(), periodStart: next.start };
-}
-
-// Stash the wording where the service worker can read it, so the push itself
-// can stay empty.
-async function storePushMessage(periodStart) {
-  const days = Math.max(0, diffDays(today(), periodStart));
-  const cache = await caches.open(PUSH_CACHE);
-  await cache.put(PUSH_KEY, new Response(
-    JSON.stringify({ body: periodWarningMessage(days), periodStart }),
-    { headers: { 'Content-Type': 'application/json' } }));
-}
-
-// The worker records what it announced; pick that up so the in-app check does
-// not repeat a warning the user already saw on the lock screen.
-async function syncPushNotified() {
-  try {
-    const res = await (await caches.open(PUSH_CACHE)).match(PUSH_KEY);
-    if (!res) return;
-    const msg = await res.json();
-    if (msg.notifiedFor && state.settings.lastNotifiedFor !== msg.notifiedFor) {
-      state.settings.lastNotifiedFor = msg.notifiedFor;
-      save();
-    }
-  } catch (e) {}
-}
-
-async function enablePush() {
-  const url = document.getElementById('settings-push-url').value.trim();
-  if (!url) { showToast('⚠️ Bitte zuerst die Adresse des Push-Servers eintragen'); return; }
-  if (!/^https:\/\//.test(url) && !/^http:\/\/localhost(:|\/|$)/.test(url)) {
-    showToast('⚠️ Der Push-Server muss über HTTPS erreichbar sein'); return;
-  }
-  if (!('PushManager' in window)) { showToast('⚠️ Dieser Browser kann kein Web Push'); return; }
-  if (Notification.permission !== 'granted') {
-    showToast('⚠️ Bitte zuerst Benachrichtigungen aktivieren'); return;
-  }
-
-  state.settings.pushUrl = url;
-  save();
-
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const res = await fetch(pushBase() + '/vapid');
-    if (!res.ok) throw new Error('Server antwortet mit ' + res.status);
-    const { publicKey } = await res.json();
-    if (!publicKey) throw new Error('Server liefert keinen Schlüssel');
-
-    const sub = await reg.pushManager.getSubscription()
-      || await reg.pushManager.subscribe({
-           userVisibleOnly: true,
-           applicationServerKey: urlBase64ToUint8Array(publicKey),
-         });
-
-    const ok = await syncPushSchedule(sub);
-    renderSettings();
-    showToast(ok ? '✅ Push aktiv – Warnung kommt auch bei geschlossener App'
-                 : 'ℹ️ Push eingerichtet – Termin wird gesetzt, sobald einer ansteht');
-  } catch (err) {
-    console.warn('push setup failed:', err);
-    showToast('⚠️ Push fehlgeschlagen: ' + err.message);
-    renderSettings();
-  }
-}
-
-// Register (or re-register) the pending reminder. Called whenever the data
-// changes, because the predicted date moves with it.
-async function syncPushSchedule(existing) {
-  if (!pushConfigured()) return false;
-  const reg = await navigator.serviceWorker.ready;
-  const sub = existing || await reg.pushManager.getSubscription();
-  if (!sub) return false;
-
-  const due = nextWarningTime();
-  if (!due) {
-    // Nothing to warn about: drop whatever the relay still holds.
-    await fetch(pushBase() + '/unsubscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endpoint: sub.endpoint }),
-    }).catch(() => {});
-    return false;
-  }
-
-  await storePushMessage(due.periodStart);
-  const res = await fetch(pushBase() + '/subscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // Deliberately only these two fields.
-    body: JSON.stringify({ subscription: sub, fireAt: due.fireAt }),
-  });
-  if (!res.ok) throw new Error('Server antwortet mit ' + res.status);
-  return true;
-}
-
-async function disablePush() {
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-    if (sub) {
-      if (state.settings.pushUrl) {
-        await fetch(pushBase() + '/unsubscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: sub.endpoint }),
-        }).catch(() => {});
-      }
-      await sub.unsubscribe();
-    }
-  } catch (e) { console.warn('push teardown:', e); }
-  state.settings.pushUrl = '';
-  save();
-  renderSettings();
-  showToast('Push deaktiviert – es verlässt wieder nichts das Gerät');
-}
-
-// Debounced: renderAll runs on every mutation, and re-registering on each one
-// would hammer the relay while someone edits.
-let _pushSyncTimer = null;
-function schedulePushSync() {
-  if (!pushConfigured()) return;
-  clearTimeout(_pushSyncTimer);
-  _pushSyncTimer = setTimeout(() => {
-    syncPushSchedule().catch(err => console.warn('push sync failed:', err));
-  }, 1200);
-}
-
-// ══════════════════════════════════════════════════════════
 // SETTINGS
 // saveSettings() — persists warnDays from UI input, reschedules notification.
 // renderSettings() — syncs UI with current state.settings.
@@ -2395,21 +2201,6 @@ function renderSettings() {
   if (btn) {
     const needsPermission = ('Notification' in window) && Notification.permission === 'default';
     btn.style.display = needsPermission ? '' : 'none';
-  }
-
-  const pushInput = document.getElementById('settings-push-url');
-  if (pushInput && document.activeElement !== pushInput) pushInput.value = state.settings.pushUrl || '';
-  const pushOff = document.getElementById('push-disable-btn');
-  const pushEl = document.getElementById('push-status');
-  if (pushEl) {
-    if (!('PushManager' in window)) {
-      pushEl.textContent = '⚠️ Dieser Browser unterstützt kein Web Push';
-    } else if (!state.settings.pushUrl) {
-      pushEl.textContent = 'Aus — alle Daten bleiben auf diesem Gerät.';
-    } else {
-      pushEl.textContent = `✅ Push aktiv über ${state.settings.pushUrl}`;
-    }
-    if (pushOff) pushOff.style.display = state.settings.pushUrl ? '' : 'none';
   }
 
   const el = document.getElementById('notif-status');
@@ -2496,8 +2287,6 @@ const ACTIONS = {
   'month-next':           () => changeMonth(1),
   'save-settings':        saveSettings,
   'enable-notifications': requestNotificationPermission,
-  'enable-push':          enablePush,
-  'disable-push':         disablePush,
   'export':               exportData,
   'share':                shareData,
   'pick-import-file':     () => document.getElementById('import-file-input').click(),
@@ -2640,24 +2429,11 @@ try {
 // automatically: iOS Safari requires a user gesture, and an unprompted
 // permission dialog on first load is hostile anyway.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.ready.then(async () => {
-    // The worker may have shown a push warning while the app was closed; adopt
-    // that before deciding whether to show one now.
-    await syncPushNotified();
-    checkDueNotification();
-    schedulePushSync();
-  });
-
-  // A push service can rotate a subscription; the worker forwards that here.
-  navigator.serviceWorker.addEventListener('message', e => {
-    if (e.data && e.data.type === 'PUSH_SUBSCRIPTION_CHANGED') {
-      syncPushSchedule().catch(err => console.warn('re-subscribe failed:', err));
-    }
-  });
+  navigator.serviceWorker.ready.then(() => checkDueNotification());
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  syncPushNotified().then(checkDueNotification);
+  checkDueNotification();
 });
 </script>
 

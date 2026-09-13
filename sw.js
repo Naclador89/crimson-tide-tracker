@@ -39,6 +39,8 @@ self.addEventListener('install', e => {
   );
 });
 
+// Deleting every cache but the current one also clears anything an earlier
+// version left behind.
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
@@ -71,67 +73,6 @@ self.addEventListener('message', e => {
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
-// ══════════════════════════════════════════════════════════
-// WEB PUSH
-//
-// The relay sends an EMPTY push on purpose — a payload would be the one place
-// cycle information could leak to the server. The wording lives here instead,
-// written into a local cache by the page when it subscribes.
-//
-// PUSH_CACHE holds one entry:
-//   { body, periodStart }   what to say, and which period it is about
-// After showing the warning the worker records notifiedFor in the same entry,
-// so the page does not announce the same period a second time on next open.
-// ══════════════════════════════════════════════════════════
-const PUSH_CACHE = 'ctt-push';
-const PUSH_KEY = './__push-message';
-
-async function readPushMessage() {
-  try {
-    const res = await (await caches.open(PUSH_CACHE)).match(PUSH_KEY);
-    return res ? await res.json() : null;
-  } catch (e) { return null; }
-}
-
-async function writePushMessage(data) {
-  try {
-    const cache = await caches.open(PUSH_CACHE);
-    await cache.put(PUSH_KEY, new Response(JSON.stringify(data),
-      { headers: { 'Content-Type': 'application/json' } }));
-  } catch (e) {}
-}
-
-self.addEventListener('push', e => {
-  e.waitUntil((async () => {
-    const msg = await readPushMessage();
-    // userVisibleOnly is a promise to the browser: always show something, even
-    // if the local text went missing.
-    const body = (msg && msg.body)
-      || 'Deine Periode steht bevor. Öffne die App für Details.';
-
-    await self.registration.showNotification('🏄\u200d♀️ Crimson Tide Tracker', {
-      body,
-      icon: './icon-192.jpg',
-      badge: './icon-192.jpg',
-      tag: 'period-warning',   // replaces an earlier warning instead of stacking
-      renotify: false,
-      requireInteraction: false,
-    });
-
-    if (msg && msg.periodStart) {
-      await writePushMessage({ ...msg, notifiedFor: msg.periodStart });
-    }
-  })());
-});
-
-// Push services may rotate a subscription on their own. Tell the page so it can
-// re-register with the relay; the old endpoint simply expires there.
-self.addEventListener('pushsubscriptionchange', e => {
-  e.waitUntil((async () => {
-    const clientList = await self.clients.matchAll({ includeUncontrolled: true });
-    for (const c of clientList) c.postMessage({ type: 'PUSH_SUBSCRIPTION_CHANGED' });
-  })());
-});
 
 // Focus an already open window instead of stacking up new ones.
 self.addEventListener('notificationclick', e => {
