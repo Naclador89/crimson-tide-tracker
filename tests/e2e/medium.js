@@ -417,7 +417,7 @@ const SEED = {
       }, [JSON.stringify(SEED), stored || '', THEME_KEY]);
       await p.goto(U);
       await p.waitForTimeout(900);
-      await p.click('[data-tab="data"]');
+      await p.click('[data-tab="settings"]');
       await p.waitForTimeout(300);
       return { c, p };
     };
@@ -448,7 +448,7 @@ const SEED = {
       check('Auswahl wird gespeichert', after.stored === 'dark', String(after.stored));
       await p.reload();
       await p.waitForTimeout(900);
-      await p.click('[data-tab="data"]');
+      await p.click('[data-tab="settings"]');
       await p.waitForTimeout(300);
       const reloaded = await readTheme(p);
       check('Auswahl ueberlebt den Reload',
@@ -522,7 +522,7 @@ const SEED = {
       check('Systemstandard folgt einem Wechsel zur Laufzeit', t1 === 'dark', t1);
       check('Zeitstrahl wird beim Themewechsel neu gezeichnet', h0 !== h1, `${h0} / ${h1}`);
 
-      await p.click('[data-tab="data"]');
+      await p.click('[data-tab="settings"]');
       await p.waitForTimeout(300);
       await p.selectOption('#settings-theme', 'light');
       await p.waitForTimeout(400);
@@ -568,7 +568,7 @@ const SEED = {
     await p.addInitScript(v => localStorage.setItem('crimson-tide-tracker', v), JSON.stringify(SEED));
     await p.goto(U);
     await p.waitForTimeout(900);
-    for (const t of ['calendar', 'cycles', 'stats', 'data', 'home']) {
+    for (const t of ['calendar', 'cycles', 'stats', 'settings', 'home']) {
       await p.evaluate(n => showTab(n, document.querySelector(`[onclick="showTab('${n}', this)"]`)), t);
       await p.waitForTimeout(200);
     }

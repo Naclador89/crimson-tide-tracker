@@ -269,7 +269,7 @@ const SEED = {
   await p5.addInitScript(seed => localStorage.setItem('crimson-tide-tracker', JSON.stringify(seed)), SEED);
   await p5.goto(U);
   await p5.waitForTimeout(600);
-  for (const t of ['calendar', 'cycles', 'stats', 'data', 'home']) {
+  for (const t of ['calendar', 'cycles', 'stats', 'settings', 'home']) {
     await p5.evaluate(n => showTab(n, document.querySelector(`[onclick="showTab('${n}', this)"]`)), t);
     await p5.waitForTimeout(150);
   }

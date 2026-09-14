@@ -3,8 +3,8 @@
 Zyklus-Tracker als installierbare Web-App. Alle Daten bleiben im `localStorage`
 des Geräts — kein Konto, kein Server, keine Netzwerkaufrufe.
 
-Die Oberfläche folgt standardmäßig dem Farbschema des Geräts; im Daten-Tab
-lässt sich stattdessen fest Hell oder Dunkel wählen.
+Die Oberfläche folgt standardmäßig dem Farbschema des Geräts; im Tab
+„Optionen“ lässt sich stattdessen fest Hell oder Dunkel wählen.
 
 Die App besteht ausschließlich aus statischen Dateien und läuft vollständig auf
 GitHub Pages. Es gibt keinen Backend-Teil, und es soll auch keinen geben: was
