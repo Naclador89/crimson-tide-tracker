@@ -46,6 +46,18 @@ sonst bekommen bestehende Installationen das Update nicht.
 Neue Dateien, die die Seite lädt, gehören in `PRECACHE` in `sw.js`. Ein Test
 prüft das.
 
+Angeboten wird das Update von `#update-banner` — einem eigenen Knopf, **nicht**
+vom Toast. Der Toast ist eine flüchtige Live-Region mit `pointer-events:none`;
+solange das Angebot in ihm steckte, ließ es sich nicht antippen. Entscheidend
+ist dabei: ein wartender Worker übernimmt erst, wenn **jedes** Fenster der App
+geschlossen ist oder er `SKIP_WAITING` bekommt. Neu laden oder die App in den
+Vordergrund holen reicht nicht — auf einem Handy, das die PWA im Hintergrund
+hält, ist der Knopf der einzige Weg zum Update. Deshalb bleibt das Angebot
+stehen, bis es angenommen wird, und verschwindet von selbst, sobald nichts mehr
+anzuwenden ist (`sync()` nach jedem Update-Check). K1c in `tests/e2e/critical.js`
+fährt den ganzen Weg einmal durch: eigener Server, echter Versionssprung,
+echter Klick.
+
 ## Tests
 
 ```sh

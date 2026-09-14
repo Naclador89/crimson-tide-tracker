@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.9.0">
+  <meta name="app-version" content="1.9.1">
   <!-- Theme bootstrap. Has to run here, in the head, before the body is
        painted: it stamps the resolved theme on <html>, and the CSS below keys
        off that attribute. Doing it from the main script at the end of the body
@@ -106,6 +106,9 @@
     --danger-border: rgba(160,14,43,0.25);
     --danger-tint: rgba(200,0,0,0.08);
     --overlay: rgba(15,29,53,0.5);
+    /* Informationsfarbe für das Update-Angebot: eine eigene Fläche, deshalb
+       in beiden Themes derselbe Wert (Weiß darauf sind 5.4:1). */
+    --info: #1a6db5;
     --cream: #f7f8fc;
     --warm-white: #eef2f9;
     --text: #0f1d35;
@@ -572,6 +575,38 @@
   }
   .toast.show { opacity:1;transform:translateY(0); }
 
+  /* ── UPDATE-ANGEBOT ──
+     Sieht aus wie ein Toast, verhält sich aber umgekehrt: es bleibt stehen,
+     bis es angetippt wird oder das Update weg ist, und es ist anklickbar.
+     Versteckt wird es über visibility, nicht nur über opacity — sonst steht
+     ein unsichtbarer Button in der Tabreihenfolge, derselbe Fehler, der bei
+     den Dialogen schon einmal behoben wurde. */
+  .update-banner {
+    position: fixed;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    right: calc(24px + env(safe-area-inset-right, 0px));
+    max-width: calc(100vw - 48px);
+    background: var(--info); color: #fff;
+    border: none; border-radius: 50px;
+    padding: 12px 22px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem; font-weight: 500; text-align: left;
+    box-shadow: var(--shadow-lg);
+    cursor: pointer; touch-action: manipulation;
+    opacity: 0; transform: translateY(8px);
+    visibility: hidden; pointer-events: none;
+    transition: opacity .3s, transform .3s, visibility .3s;
+    z-index: 9998;
+  }
+  .update-banner.show {
+    opacity: 1; transform: translateY(0);
+    visibility: visible; pointer-events: auto;
+  }
+  .update-banner:disabled { cursor: default; }
+  /* Beide sind unten rechts fixiert: solange das Update-Angebot steht, rückt
+     der Toast darüber, statt sich mit ihm zu überlagern. */
+  body.update-pending .toast { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+
   /* Keyboard focus was invisible everywhere — nothing in the app styled it. */
   :focus-visible {
     outline: 3px solid var(--rose-ink);
@@ -776,6 +811,11 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- Bewusst ein eigenes Element und ein echter Button, nicht der Toast: der
+     Toast ist eine fluechtige, absichtlich nicht anklickbare Live-Region
+     (pointer-events:none). Beides in einem Element hiess, dass das
+     Update-Angebot nicht angetippt werden konnte. -->
+<button class="update-banner" id="update-banner" type="button"></button>
 
 <script src="./cycle-core.js"></script>
 <script>
@@ -2686,52 +2726,98 @@ document.addEventListener('visibilitychange', () => {
 // its cache name. updateViaCache:'none' keeps an HTTP cache from serving a
 // stale worker script.
 //
-// When a new worker is waiting, a toast offers the update; tapping it tells
-// the worker to activate, and the resulting controllerchange reloads the page.
+// When a new worker is waiting, #update-banner offers the update; tapping it
+// tells the worker to activate, and the resulting controllerchange reloads the
+// page.
+//
+// The banner is visible exactly while a worker is waiting. That is not a
+// cosmetic detail: a waiting worker only takes over when every window of the
+// app is gone or when it is told to skip waiting, so "just reopen the app"
+// does not apply the update on a phone that keeps the PWA in the background.
+// The offer therefore has to survive until it is taken — and disappear by
+// itself once there is nothing left to apply, for instance because another
+// tab took the update.
 // ══════════════════════════════════════════════════════════
 (function () {
   if (!('serviceWorker' in navigator)) return;
 
   const APP_VERSION = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
+  const banner = document.getElementById('update-banner');
+
+  // The installed worker waiting to take over, or null when the app is current.
+  let waiting = null;
+  let reloading = false;
+
+  const reloadOnce = () => {
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  };
+
+  const hideBanner = () => {
+    waiting = null;
+    banner.classList.remove('show');
+    document.body.classList.remove('update-pending');
+  };
+
+  const showBanner = (sw) => {
+    if (waiting === sw) return;
+    waiting = sw;
+    banner.disabled = false;
+    banner.textContent = '🆕 Update verfügbar — tippe zum Aktualisieren';
+    banner.classList.add('show');
+    document.body.classList.add('update-pending');
+    // A waiting worker can be discarded while the offer stands — another tab
+    // may take the update, or it activates once the last window closes. Then
+    // there is nothing left to offer.
+    sw.addEventListener('statechange', () => {
+      if (sw.state !== 'installed' && waiting === sw) hideBanner();
+    });
+  };
+
+  banner.addEventListener('click', () => {
+    if (!waiting) { hideBanner(); return; }
+    banner.disabled = true;
+    banner.textContent = '⏳ Wird aktualisiert …';
+    waiting.postMessage('SKIP_WAITING');
+    // controllerchange normally does the reload. If the worker turns out to be
+    // gone already, reload anyway rather than leaving the banner spinning.
+    setTimeout(reloadOnce, 3000);
+  });
+
+  // Reload once the new worker takes control.
+  navigator.serviceWorker.addEventListener('controllerchange', reloadOnce);
 
   navigator.serviceWorker.register('./sw.js?v=' + encodeURIComponent(APP_VERSION), {
     scope: './',
     updateViaCache: 'none',
   }).then(reg => {
 
-    // Check for updates whenever the app comes back to the foreground
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') reg.update();
-    });
-
-    // A new SW is waiting → offer the update
-    const onNewSW = (sw) => {
-      const toast = document.getElementById('toast');
-      toast.textContent = '🆕 Update verfügbar — tippe zum Aktualisieren';
-      toast.style.cursor = 'pointer';
-      toast.style.background = '#1a6db5';
-      toast.classList.add('show');
-      toast.onclick = () => {
-        sw.postMessage('SKIP_WAITING');
-        toast.classList.remove('show');
-        toast.onclick = null;
-      };
+    // The single source of truth for the banner: is a worker waiting or not?
+    // Called on load and after every update check, so the offer appears when
+    // there is one and vanishes when there is none.
+    const sync = () => {
+      // Without a controller this is the first install, not an update — there
+      // is nothing to offer and nothing to reload for.
+      if (reg.waiting && navigator.serviceWorker.controller) showBanner(reg.waiting);
+      else hideBanner();
     };
 
-    if (reg.waiting) onNewSW(reg.waiting);
+    sync();
+
+    // Check for updates whenever the app comes back to the foreground, then
+    // re-sync: that is what clears a stale offer on the next launch.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      Promise.resolve(reg.update()).catch(() => {}).then(sync);
+    });
 
     reg.addEventListener('updatefound', () => {
       const newSW = reg.installing;
       if (!newSW) return;
       newSW.addEventListener('statechange', () => {
-        if (newSW.state === 'installed' && navigator.serviceWorker.controller) onNewSW(newSW);
+        if (newSW.state === 'installed') sync();
       });
-    });
-
-    // Reload once the new SW takes control
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) { refreshing = true; window.location.reload(); }
     });
 
   }).catch(err => {
