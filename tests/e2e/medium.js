@@ -395,6 +395,168 @@ const SEED = {
     await c.close();
   }
 
+  // ══ M7 — Theme-Auswahl (Systemstandard / Hell / Dunkel) ══
+  console.log('\n=== M7  Theme-Auswahl ===');
+  {
+    const THEME_KEY = 'crimson-tide-tracker-theme';
+    // Everything downstream hangs off data-theme on <html>, so that attribute
+    // and the card colour together say what is actually applied.
+    const readTheme = p => p.evaluate(() => ({
+      attr: document.documentElement.dataset.theme,
+      card: getComputedStyle(document.querySelector('.card')).backgroundColor,
+      scheme: getComputedStyle(document.documentElement).colorScheme,
+      sel: document.getElementById('settings-theme').value,
+      stored: localStorage.getItem('crimson-tide-tracker-theme'),
+    }));
+    const open = async (system, stored) => {
+      const c = await browser.newContext({ timezoneId: 'Europe/Berlin', colorScheme: system });
+      const p = await c.newPage();
+      await p.addInitScript(([v, t, k]) => {
+        localStorage.setItem('crimson-tide-tracker', v);
+        if (t) localStorage.setItem(k, t);
+      }, [JSON.stringify(SEED), stored || '', THEME_KEY]);
+      await p.goto(U);
+      await p.waitForTimeout(900);
+      await p.click('[data-tab="data"]');
+      await p.waitForTimeout(300);
+      return { c, p };
+    };
+
+    // Ohne Auswahl gilt der Systemstandard — in beide Richtungen.
+    {
+      const a = await open('light'), b = await open('dark');
+      const la = await readTheme(a.p), db = await readTheme(b.p);
+      check('ohne Auswahl steht "Systemstandard" im Feld',
+        la.sel === 'system' && db.sel === 'system' && la.stored === null,
+        JSON.stringify({ la: la.sel, db: db.sel, stored: la.stored }));
+      check('Systemstandard folgt dem System',
+        la.attr === 'light' && db.attr === 'dark' && la.card !== db.card,
+        JSON.stringify({ hell: la.attr, dunkel: db.attr }));
+      await a.c.close(); await b.c.close();
+    }
+
+    // Eine Auswahl schlaegt das System — der eigentliche Zweck der Einstellung.
+    {
+      const { c, p } = await open('light');
+      const before = await readTheme(p);
+      await p.selectOption('#settings-theme', 'dark');
+      await p.waitForTimeout(400);
+      const after = await readTheme(p);
+      check('"Dunkel" schaltet trotz hellem System um',
+        after.attr === 'dark' && after.card !== before.card && after.scheme === 'dark',
+        JSON.stringify(after));
+      check('Auswahl wird gespeichert', after.stored === 'dark', String(after.stored));
+      await p.reload();
+      await p.waitForTimeout(900);
+      await p.click('[data-tab="data"]');
+      await p.waitForTimeout(300);
+      const reloaded = await readTheme(p);
+      check('Auswahl ueberlebt den Reload',
+        reloaded.attr === 'dark' && reloaded.sel === 'dark', JSON.stringify(reloaded));
+      await c.close();
+    }
+
+    // Wann das Attribut gesetzt wird, entscheidet ueber den Farbblitz beim
+    // Laden: kommt es vom Bootstrap-Skript im <head>, steht es, bevor es einen
+    // <body> zum Zeichnen gibt. Kommt es erst vom Hauptskript am Seitenende,
+    // ist der Body laengst geparst — die Seite erscheint dann hell und springt
+    // einen Frame spaeter um. Genau das misst dieser Test, und nur das:
+    // waehrend welcher Parsephase das data-theme-Attribut erscheint.
+    {
+      const c = await browser.newContext({ timezoneId: 'Europe/Berlin', colorScheme: 'light' });
+      const p = await c.newPage();
+      await p.addInitScript(() => {
+        // Laeuft vor jedem Seitenskript — zu dem Zeitpunkt gibt es noch kein
+        // documentElement, deshalb haengt der Observer am document.
+        window.__themeStamp = 'nie gesetzt';
+        new MutationObserver((recs, obs) => {
+          for (const r of recs) {
+            if (r.type === 'attributes' && r.attributeName === 'data-theme'
+                && r.target === document.documentElement) {
+              window.__themeStamp = { bodyExists: !!document.body, readyState: document.readyState };
+              obs.disconnect();
+              return;
+            }
+          }
+        }).observe(document, { attributes: true, subtree: true, childList: true });
+      });
+      await p.addInitScript(k => localStorage.setItem(k, 'dark'), THEME_KEY);
+      await p.goto(U);
+      await p.waitForTimeout(900);
+      const st = await p.evaluate(() => window.__themeStamp);
+      const applied = await p.evaluate(() => getComputedStyle(document.querySelector('.card')).backgroundColor);
+      check('Theme steht schon vor dem <body> — kein Umspringen beim Laden',
+        st && st.bodyExists === false && st.readyState === 'loading' && applied === 'rgb(26, 45, 69)',
+        JSON.stringify({ st, applied }));
+      await c.close();
+    }
+
+    // Umgekehrt: helles Theme auf einem dunklen System.
+    {
+      const { c, p } = await open('dark', 'light');
+      const r = await readTheme(p);
+      check('"Hell" schaltet trotz dunklem System um',
+        r.attr === 'light' && r.scheme === 'light' && r.sel === 'light', JSON.stringify(r));
+      await c.close();
+    }
+
+    // Ein Systemwechsel zur Laufzeit: bei "Systemstandard" mitgehen, bei einer
+    // ausdruecklichen Wahl nicht. Die Canvas-Farben backen beim Zeichnen ein,
+    // deshalb zaehlt nicht nur das Attribut, sondern ob neu gezeichnet wurde.
+    {
+      const hash = p => p.evaluate(() => {
+        const cv = document.getElementById('timeline-canvas');
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let h = 0;
+        for (let i = 0; i < d.length; i += 97) h = (h * 31 + d[i]) >>> 0;
+        return h;
+      });
+      const { c, p } = await open('light');
+      await p.click('[data-tab="home"]');
+      await p.waitForTimeout(600);
+      const h0 = await hash(p);
+      await p.emulateMedia({ colorScheme: 'dark' });
+      await p.waitForTimeout(700);
+      const t1 = await p.evaluate(() => document.documentElement.dataset.theme);
+      const h1 = await hash(p);
+      check('Systemstandard folgt einem Wechsel zur Laufzeit', t1 === 'dark', t1);
+      check('Zeitstrahl wird beim Themewechsel neu gezeichnet', h0 !== h1, `${h0} / ${h1}`);
+
+      await p.click('[data-tab="data"]');
+      await p.waitForTimeout(300);
+      await p.selectOption('#settings-theme', 'light');
+      await p.waitForTimeout(400);
+      await p.click('[data-tab="home"]');
+      await p.waitForTimeout(600);
+      const h2 = await hash(p);
+      await p.emulateMedia({ colorScheme: 'light' });
+      await p.waitForTimeout(300);
+      await p.emulateMedia({ colorScheme: 'dark' });
+      await p.waitForTimeout(700);
+      const t3 = await p.evaluate(() => document.documentElement.dataset.theme);
+      check('ausdrueckliche Wahl ignoriert den Systemwechsel',
+        t3 === 'light' && (await hash(p)) === h2, `${t3} / ${h2}`);
+      await c.close();
+    }
+
+    // Muell im Storage darf die App nicht in ein viertes Theme schicken.
+    {
+      const { c, p } = await open('dark', 'neon');
+      const r = await readTheme(p);
+      check('unbekannter gespeicherter Wert faellt auf Systemstandard zurueck',
+        r.attr === 'dark' && r.sel === 'system', JSON.stringify(r));
+      await c.close();
+    }
+
+    // Die Auswahl ist eine Geraeteeinstellung, keine Zyklusdaten.
+    {
+      const { c, p } = await open('light', 'dark');
+      const exported = await p.evaluate(() => JSON.stringify(state));
+      check('Theme steht nicht im Export', !/theme/i.test(exported), exported.slice(0, 80));
+      await c.close();
+    }
+  }
+
   // ══ Regression ══
   console.log('\n=== Regression ===');
   {

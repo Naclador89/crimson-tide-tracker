@@ -92,8 +92,22 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
   Server samt Domain. Das widerspricht dem Kern dieser App, also gibt es das
   bewusst nicht. Timer im Service Worker sind übrigens auch kein Ersatz — er
   wird nach Sekunden Leerlauf beendet.
+- **Theme**: Es gibt drei Einstellungen — Systemstandard, Hell, Dunkel. Sie
+  steht unter dem eigenen `localStorage`-Schlüssel
+  `crimson-tide-tracker-theme`, **nicht** in `state.settings`: sie beschreibt
+  das Gerät, nicht die Zyklusdaten, und gehört deshalb nicht in den Export.
+  Aufgelöst wird sie vom Bootstrap-Skript im `<head>` (`system` gegen
+  `prefers-color-scheme`), das `data-theme="light|dark"` auf `<html>` setzt —
+  das muss **vor** dem `<body>` passieren, sonst erscheint die Seite hell und
+  springt einen Frame später um. Danach setzt nur noch `applyTheme()` dieses
+  Attribut — Schlüssel, erlaubte Werte und Auflösungsregel stehen damit an
+  zwei Stellen und müssen gleich bleiben; ein Test speichert eine Auswahl,
+  lädt neu und prüft, dass das `<head>`-Skript sie übernimmt. Das CSS hängt am Attribut statt an der Media Query,
+  denn eine Media Query lässt sich aus der UI nicht überstimmen. Und die
+  Canvas-Diagramme backen ihre Farben beim Zeichnen ein — nach einem
+  Themewechsel müssen sie neu gezeichnet werden (`repaintForTheme()`).
 - **Farben**: Jede Farbe steht als CSS-Variable in `:root` und wird im
-  `@media (prefers-color-scheme: dark)`-Block überschrieben. Zwei Fallen: Eine
+  `:root[data-theme="dark"]`-Block überschrieben. Zwei Fallen: Eine
   eingefärbte Fläche muss **immer auch ihre Schriftfarbe setzen** — erbt sie
   `--text`, steht im Dark Mode Weiß auf Pastell. Und Inline-Styles (auch die
   aus dem JS erzeugten Badges und Pills) lassen sich von keiner Media Query

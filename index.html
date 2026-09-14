@@ -13,7 +13,28 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.7.0">
+  <meta name="app-version" content="1.8.0">
+  <!-- Theme bootstrap. Has to run here, in the head, before the body is
+       painted: it stamps the resolved theme on <html>, and the CSS below keys
+       off that attribute. Doing it from the main script at the end of the body
+       would paint the page light first and correct it a frame later — exactly
+       the flash this avoids. Inline and dependency-free for the same reason.
+       localStorage throws in some privacy modes, hence the try.
+
+       This repeats what readThemePref()/applyTheme() do further down, and has
+       to: nothing of the main script exists yet up here. Key, allowed values
+       and the resolution rule must stay identical in both places — a test
+       stores a choice, reloads and checks that this script picks it up. -->
+  <script>
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem('crimson-tide-tracker-theme'); } catch (e) {}
+      if (pref !== 'light' && pref !== 'dark') pref = 'system';
+      var dark = pref === 'dark' || (pref === 'system'
+        && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    })();
+  </script>
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -61,8 +82,10 @@
   :root {
     /* Native widgets (date picker, select popup, scrollbars, spin buttons)
        follow this, not our variables. Without it they stay white in dark
-       mode — the one part of the page CSS alone cannot repaint. */
-    color-scheme: light dark;
+       mode — the one part of the page CSS alone cannot repaint. It names one
+       theme rather than "light dark", because the chosen theme is not always
+       the system's. */
+    color-scheme: light;
 
     /* ── Logo palette: Navy + Crimson + White ── */
     --rose: #dc143c;
@@ -158,89 +181,95 @@
     --label-follicular: rgba(92,53,200,0.70);
     --label-luteal:     rgba(46,125,79,0.70);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --cream: #0d1b2e;
-      --warm-white: #162337;
-      --card: #1a2d45;
-      /* Measured against --card (#1a2d45): --text 14.9:1, --text-mid 8.4:1,
-         --text-light 5.8:1. The old --text-mid/--text-light were carried over
-         from the light theme and landed at 6.2:1 and 3.2:1 — the second one
-         fails AA, and it is what the calendar weekday row, every stat label,
-         the chart captions and the cycle list meta line are painted in. */
-      --text: #e8f0ff;
-      --text-mid: #b7cbe8;
-      --text-light: #8fa9d0;
-      /* The old #2a3f5c divider all but vanished against the card; card
-         edges, input outlines and the tab strip need to be findable. */
-      --border: #3d557a;
-      --shadow: 0 4px 24px rgba(0,0,0,0.35);
-      --shadow-lg: 0 8px 40px rgba(0,0,0,0.50);
+  /* ── Dark theme ──
+     Keyed off the attribute the head script stamps, not off the media query
+     directly: the theme can also be chosen by hand in the settings, and a
+     media query cannot be overruled from the UI. The script resolves
+     "Systemstandard" against prefers-color-scheme, so this block still
+     follows the system whenever nothing else was chosen. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
 
-      /* --rose stays the button/badge surface (white on it is 5:1 either
-         way); only the ink brightens, to 5.3:1 on the card. */
-      --rose-ink: #ff6f8d;
-      --rose-pale: #3d2233;
-      --rose-tint: rgba(255,111,141,0.16);
-      --rose-border: rgba(255,111,141,0.45);
-      --danger: #b3162f;
-      --danger-ink: #ff8a8a;
-      --danger-border: rgba(255,138,138,0.30);
-      --danger-tint: rgba(255,138,138,0.16);
-      --overlay: rgba(4,9,17,0.62);
+    --cream: #0d1b2e;
+    --warm-white: #162337;
+    --card: #1a2d45;
+    /* Measured against --card (#1a2d45): --text 14.9:1, --text-mid 8.4:1,
+       --text-light 5.8:1. The old --text-mid/--text-light were carried over
+       from the light theme and landed at 6.2:1 and 3.2:1 — the second one
+       fails AA, and it is what the calendar weekday row, every stat label,
+       the chart captions and the cycle list meta line are painted in. */
+    --text: #e8f0ff;
+    --text-mid: #b7cbe8;
+    --text-light: #8fa9d0;
+    /* The old #2a3f5c divider all but vanished against the card; card
+       edges, input outlines and the tab strip need to be findable. */
+    --border: #3d557a;
+    --shadow: 0 4px 24px rgba(0,0,0,0.35);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,0.50);
 
-      /* Chart palette, dark: pale pastels become deep tints that still read
-         as the same hue against the card, and every ink colour flips. */
-      --ph-period:      #e8547a;
-      --ph-pred-period: #6d2740;
-      --ph-hell:        #d4462f;
-      --ph-pms:         #7a5a1c;
-      --ph-ovulation:   #2ec4b6;
-      --ph-fertile:     #1f5340;
-      --ph-follicular:  #1c3450;
-      --ph-luteal:      #322a55;
-      --ph-unknown:     #24344a;
+    /* --rose stays the button/badge surface (white on it is 5:1 either
+       way); only the ink brightens, to 5.3:1 on the card. */
+    --rose-ink: #ff6f8d;
+    --rose-pale: #3d2233;
+    --rose-tint: rgba(255,111,141,0.16);
+    --rose-border: rgba(255,111,141,0.45);
+    --danger: #b3162f;
+    --danger-ink: #ff8a8a;
+    --danger-border: rgba(255,138,138,0.30);
+    --danger-tint: rgba(255,138,138,0.16);
+    --overlay: rgba(4,9,17,0.62);
 
-      /* Phase surfaces, dark: the pale tint and the dark ink swap roles.
-         Each pair clears 5.5:1. */
-      --day-pred-bg:    #6d2740;  --day-pred-ink:    #ffd0dc;
-      --day-pms-bg:     #7a5a1c;  --day-pms-ink:     #ffeec2;
-      --day-hell-bg:    #b3162f;  --day-hell-ink:    #ffffff;
-      --day-fertile-bg: #1f5340;  --day-fertile-ink: #b6ecd3;
-      --day-ov-bg:      #2ec4b6;  --day-ov-ink:      #06322e;
-      --day-foll-bg:    #1c3450;  --day-foll-ink:    #bcd8f8;
-      --day-lut-bg:     #322a55;  --day-lut-ink:     #d5cbff;
+    /* Chart palette, dark: pale pastels become deep tints that still read
+       as the same hue against the card, and every ink colour flips. */
+    --ph-period:      #e8547a;
+    --ph-pred-period: #6d2740;
+    --ph-hell:        #d4462f;
+    --ph-pms:         #7a5a1c;
+    --ph-ovulation:   #2ec4b6;
+    --ph-fertile:     #1f5340;
+    --ph-follicular:  #1c3450;
+    --ph-luteal:      #322a55;
+    --ph-unknown:     #24344a;
 
-      --pill-period-bg:  #5c2035;  --pill-period-ink:  #ffd0dc;
-      --pill-pms-bg:     #6a4d18;  --pill-pms-ink:     #ffeec2;
-      --pill-hell-bg:    #5c2020;  --pill-hell-ink:    #ffc9c9;
-      --pill-ov-bg:      #14493a;  --pill-ov-ink:      #a9ecd8;
-      --pill-foll-bg:    #1c3450;  --pill-foll-ink:    #bcd8f8;
-      --pill-lut-bg:     #322a55;  --pill-lut-ink:     #d5cbff;
-      --pill-unknown-bg: #24344a;  --pill-unknown-ink: #c3d5ee;
+    /* Phase surfaces, dark: the pale tint and the dark ink swap roles.
+       Each pair clears 5.5:1. */
+    --day-pred-bg:    #6d2740;  --day-pred-ink:    #ffd0dc;
+    --day-pms-bg:     #7a5a1c;  --day-pms-ink:     #ffeec2;
+    --day-hell-bg:    #b3162f;  --day-hell-ink:    #ffffff;
+    --day-fertile-bg: #1f5340;  --day-fertile-ink: #b6ecd3;
+    --day-ov-bg:      #2ec4b6;  --day-ov-ink:      #06322e;
+    --day-foll-bg:    #1c3450;  --day-foll-ink:    #bcd8f8;
+    --day-lut-bg:     #322a55;  --day-lut-ink:     #d5cbff;
 
-      /* #a00e2b on navy is all but invisible; both curves move up. */
-      --chart-curve-1: #ff6f8d;
-      --chart-curve-2: #ff9db0;
-      /* White hairlines glared on the dark timeline bar — cut into it
-         instead of drawing on top of it. */
-      --chart-sep: rgba(10,18,30,0.45);
+    --pill-period-bg:  #5c2035;  --pill-period-ink:  #ffd0dc;
+    --pill-pms-bg:     #6a4d18;  --pill-pms-ink:     #ffeec2;
+    --pill-hell-bg:    #5c2020;  --pill-hell-ink:    #ffc9c9;
+    --pill-ov-bg:      #14493a;  --pill-ov-ink:      #a9ecd8;
+    --pill-foll-bg:    #1c3450;  --pill-foll-ink:    #bcd8f8;
+    --pill-lut-bg:     #322a55;  --pill-lut-ink:     #d5cbff;
+    --pill-unknown-bg: #24344a;  --pill-unknown-ink: #c3d5ee;
 
-      --chart-ink:    #e8f0ff;
-      --chart-muted:  #7e97bd;
-      --chart-accent: #5fa8e0;
-      --chart-ref-fill:   rgba(160,180,210,0.14);
-      --chart-ref-stroke: rgba(150,175,210,0.55);
+    /* #a00e2b on navy is all but invisible; both curves move up. */
+    --chart-curve-1: #ff6f8d;
+    --chart-curve-2: #ff9db0;
+    /* White hairlines glared on the dark timeline bar — cut into it
+       instead of drawing on top of it. */
+    --chart-sep: rgba(10,18,30,0.45);
 
-      --hormone-estrogen:     #ff5c7a;
-      --hormone-lh:           #a68cff;
-      --hormone-fsh:          #5fa8e0;
-      --hormone-progesterone: #4fc08a;
-      --band-follicular: rgba(120,160,220,0.14);
-      --band-luteal:     rgba(212,180,100,0.10);
-      --label-follicular: rgba(166,140,255,0.85);
-      --label-luteal:     rgba(79,192,138,0.85);
-    }
+    --chart-ink:    #e8f0ff;
+    --chart-muted:  #7e97bd;
+    --chart-accent: #5fa8e0;
+    --chart-ref-fill:   rgba(160,180,210,0.14);
+    --chart-ref-stroke: rgba(150,175,210,0.55);
+
+    --hormone-estrogen:     #ff5c7a;
+    --hormone-lh:           #a68cff;
+    --hormone-fsh:          #5fa8e0;
+    --hormone-progesterone: #4fc08a;
+    --band-follicular: rgba(120,160,220,0.14);
+    --band-luteal:     rgba(212,180,100,0.10);
+    --label-follicular: rgba(166,140,255,0.85);
+    --label-luteal:     rgba(79,192,138,0.85);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -646,6 +675,22 @@
   <!-- ══ DATEN ══ -->
   <div id="tab-data" class="section" role="tabpanel" aria-labelledby="tabbtn-data" tabindex="0">
     <div class="card">
+      <div class="card-title"><span class="icon">🎨</span>Erscheinungsbild</div>
+      <div class="form-group" style="max-width:260px">
+        <label for="settings-theme">Farbschema</label>
+        <select id="settings-theme">
+          <option value="system">Systemstandard</option>
+          <option value="light">Hell</option>
+          <option value="dark">Dunkel</option>
+        </select>
+      </div>
+      <p style="font-size:.78rem;color:var(--text-light);margin-top:10px;line-height:1.5">
+        „Systemstandard“ folgt der Einstellung deines Geräts und wechselt mit ihr mit.
+        Die Auswahl gilt sofort und nur auf diesem Gerät — sie gehört nicht zu den
+        Zyklusdaten und ist deshalb auch nicht im Export enthalten.
+      </p>
+    </div>
+    <div class="card">
       <div class="card-title"><span class="icon">⚙️</span>Einstellungen</div>
       <div class="form-group" style="max-width:260px;margin-bottom:14px">
         <label>Vorwarnung vor Periode</label>
@@ -808,6 +853,56 @@ function load() {
     warnDays: Number.isFinite(warn) && warn >= 1 && warn <= 14 ? Math.round(warn) : 3,
     lastNotifiedFor: typeof s.lastNotifiedFor === 'string' ? s.lastNotifiedFor : null,
   };
+}
+
+// ══════════════════════════════════════════════════════════
+// THEME
+//
+// Three preferences: 'system', 'light' and 'dark'. 'system' is not a third
+// colour scheme, it is the absence of a choice — it resolves against
+// prefers-color-scheme and keeps following it.
+//
+// The preference lives in its own localStorage key rather than in
+// state.settings, for two reasons: it describes this device, not the cycle
+// data (so it has no business travelling in an export to another phone), and
+// the bootstrap script in <head> has to read it before the first paint —
+// without parsing, or trusting, the whole state blob.
+//
+// Everything downstream keys off the data-theme attribute on <html>. It is
+// set exactly twice: once by the bootstrap script in <head> before the first
+// paint, and from then on only by applyTheme() — which must stay in step with
+// that script.
+// ══════════════════════════════════════════════════════════
+const THEME_KEY = 'crimson-tide-tracker-theme';
+const THEMES = ['system', 'light', 'dark'];
+
+function readThemePref() {
+  let pref = null;
+  try { pref = localStorage.getItem(THEME_KEY); } catch(e) {}
+  return THEMES.includes(pref) ? pref : 'system';
+}
+
+function systemPrefersDark() {
+  return !!window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+}
+
+function applyTheme(pref) {
+  const dark = pref === 'dark' || (pref === 'system' && systemPrefersDark());
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+}
+
+// The canvases bake the theme's colours in at draw time — CSS cannot reach
+// into a canvas, so a theme switch has to redraw them.
+function repaintForTheme() {
+  renderHome();
+  renderStats();
+}
+
+function setThemePref(pref) {
+  if (!THEMES.includes(pref)) pref = 'system';
+  try { localStorage.setItem(THEME_KEY, pref); } catch(e) {}
+  applyTheme(pref);
+  repaintForTheme();
 }
 
 // Keeps the unreadable payload around instead of silently overwriting it on
@@ -2321,6 +2416,9 @@ function renderSettings() {
   const inp = document.getElementById('settings-warn-days');
   if (inp) inp.value = state.settings.warnDays;
 
+  const theme = document.getElementById('settings-theme');
+  if (theme) theme.value = readThemePref();
+
   const btn = document.getElementById('notif-enable-btn');
   if (btn) {
     const needsPermission = ('Notification' in window) && Notification.permission === 'default';
@@ -2392,12 +2490,17 @@ function requestNotificationPermission() {
 // ══════════════════════════════════════════════════════════
 // INITIALISATION
 // 1. load()      — restore state from localStorage
-// 2. Event listeners for modal overlays (close on backdrop click)
+// 2. applyTheme() — re-stamp the theme. The head script already did this
+//                  before the first paint; repeating it here keeps this
+//                  script self-sufficient and picks up a choice another tab
+//                  made in the meantime.
+// 3. Event listeners for modal overlays (close on backdrop click)
 //                  and keyboard shortcuts (Enter=save, Escape=close)
-// 3. renderAll() — initial render
-// 4. resize listener — redraws canvases on window resize
+// 4. renderAll() — initial render
+// 5. resize listener — redraws canvases on window resize
 // ══════════════════════════════════════════════════════════
 load();
+applyTheme(readThemePref());
 
 // ── Event delegation ───────────────────────────────────────
 // One listener instead of nineteen inline onclick attributes. Inline handlers
@@ -2441,6 +2544,9 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'import-file-input') importData(e);
   if (e.target.id === 'm-start') autoFillEndDate();
+  // Applied on change, not on "Speichern": a colour scheme you cannot see
+  // until you press save is a worse control than one that just switches.
+  if (e.target.id === 'settings-theme') setThemePref(e.target.value);
 });
 
 // ── Keyboard ───────────────────────────────────────────────
@@ -2519,11 +2625,13 @@ window.addEventListener('resize', () => {
   _resizeTimer = setTimeout(() => { renderStats(); drawHormones(); drawTimeline(); }, 150);
 });
 
-// The canvases bake the theme's colours in at draw time, so they have to be
-// repainted when the system switches between light and dark.
+// Follow the system only while nothing else was chosen. With 'Hell' or
+// 'Dunkel' set, the attribute already pins the theme and a system switch is
+// none of our business.
 window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
-  renderHome();
-  renderStats();
+  if (readThemePref() !== 'system') return;
+  applyTheme('system');
+  repaintForTheme();
 });
 
 // Request persistent storage to protect health data from browser eviction
