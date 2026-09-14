@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.9.1">
+  <meta name="app-version" content="1.9.2">
   <!-- Theme bootstrap. Has to run here, in the head, before the body is
        painted: it stamps the resolved theme on <html>, and the CSS below keys
        off that attribute. Doing it from the main script at the end of the body
@@ -746,11 +746,16 @@
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button class="quick-btn" data-action="save-settings" style="margin:0">Speichern</button>
         <button class="quick-btn secondary" id="notif-enable-btn" data-action="enable-notifications" style="margin:0;display:none">🔔 Benachrichtigungen aktivieren</button>
+        <button class="quick-btn secondary" id="notif-toggle-btn" data-action="toggle-notifications" style="margin:0;display:none">🔕 Benachrichtigungen ausschalten</button>
       </div>
       <div id="notif-status" style="font-size:.78rem;color:var(--text-light);margin-top:10px"></div>
       <p style="font-size:.78rem;color:var(--text-light);margin-top:12px;line-height:1.5">
-        Benachrichtigungen funktionieren auf <strong>Android</strong> (Chrome, installierte PWA) und auf <strong>iOS 16.4+</strong> nur wenn die App zum Home-Screen hinzugefügt wurde.
-        Die Warnung erscheint, sobald du die App am oder nach dem Warntag öffnest.
+        <strong>Die App kann dich nur warnen, während sie läuft oder wenn du sie öffnest</strong> — die Warnung erscheint also beim ersten Öffnen am oder nach dem Warntag, nicht von selbst mitten in der Nacht.
+        Eine geschlossene App könnte nur ein Push-Server aufwecken, und den gibt es hier bewusst nicht: alle Daten bleiben auf dem Gerät.
+      </p>
+      <p style="font-size:.78rem;color:var(--text-light);margin-top:8px;line-height:1.5">
+        Voraussetzung ist <strong>Android</strong> (Chrome, installierte PWA) oder <strong>iOS 16.4+</strong> mit der App auf dem Home-Screen.
+        Ausschalten wirkt nur in dieser App — die Berechtigung selbst nimmst du in den Browser-Einstellungen zurück.
       </p>
     </div>
     <div class="card">
@@ -832,7 +837,11 @@ let state = {
   // warnDays        — days before the predicted start to warn
   // lastNotifiedFor — start date of the period the last warning was for,
   //                   so the same cycle is never announced twice
-  settings: { warnDays: 3, lastNotifiedFor: null }
+  // notifyEnabled   — the app's own on/off switch. The browser permission can
+  //                   only ever be granted, never revoked from script, so
+  //                   without this there is no way back out of notifications
+  //                   short of the browser settings.
+  settings: { warnDays: 3, lastNotifiedFor: null, notifyEnabled: true }
 };
 
 // ── Bindings to cycle-core.js ──
@@ -898,6 +907,9 @@ function load() {
   state.settings = {
     warnDays: Number.isFinite(warn) && warn >= 1 && warn <= 14 ? Math.round(warn) : 3,
     lastNotifiedFor: typeof s.lastNotifiedFor === 'string' ? s.lastNotifiedFor : null,
+    // Anything that is not an explicit false means on: users from before this
+    // setting existed had notifications on, and must keep them.
+    notifyEnabled: s.notifyEnabled !== false,
   };
 }
 
@@ -2410,6 +2422,10 @@ function checkDueNotification() {
   if (!('Notification' in window) || !navigator.serviceWorker) return;
   if (Notification.permission !== 'granted') return;
 
+  // Switched off in the app. Clearing the badge too, or the icon keeps a dot
+  // for a warning that will never be shown.
+  if (!state.settings.notifyEnabled) { navigator.clearAppBadge?.().catch(() => {}); return; }
+
   const nextPeriod = nextPredictedPeriod();
   if (!nextPeriod) { navigator.clearAppBadge?.().catch(() => {}); return; }
 
@@ -2465,10 +2481,19 @@ function renderSettings() {
   const theme = document.getElementById('settings-theme');
   if (theme) theme.value = readThemePref();
 
+  // Two separate buttons, never both: the permission can only be asked for once
+  // and never taken back, so asking and switching off are different acts.
+  const supported = ('Notification' in window);
+  const granted   = supported && Notification.permission === 'granted';
+  const on        = state.settings.notifyEnabled;
+
   const btn = document.getElementById('notif-enable-btn');
-  if (btn) {
-    const needsPermission = ('Notification' in window) && Notification.permission === 'default';
-    btn.style.display = needsPermission ? '' : 'none';
+  if (btn) btn.style.display = (supported && Notification.permission === 'default') ? '' : 'none';
+
+  const toggle = document.getElementById('notif-toggle-btn');
+  if (toggle) {
+    toggle.style.display = granted ? '' : 'none';
+    toggle.textContent = on ? '🔕 Benachrichtigungen ausschalten' : '🔔 Benachrichtigungen einschalten';
   }
 
   const el = document.getElementById('notif-status');
@@ -2476,10 +2501,13 @@ function renderSettings() {
   if (swRegistrationFailed) {
     el.textContent = '⚠️ Service Worker konnte nicht geladen werden – Offline-Modus und Benachrichtigungen sind deaktiviert';
     el.style.color = 'var(--danger-ink)';
-  } else if (!('Notification' in window)) {
+  } else if (!supported) {
     el.textContent = '⚠️ Benachrichtigungen werden von diesem Browser nicht unterstützt';
-  } else if (Notification.permission === 'granted') {
-    el.textContent = '✅ Benachrichtigungen aktiv';
+  } else if (granted && on) {
+    el.textContent = '✅ Benachrichtigungen aktiv – die Warnung erscheint, sobald du die App öffnest';
+    el.style.color = 'var(--text-light)';
+  } else if (granted) {
+    el.textContent = '🔕 Benachrichtigungen ausgeschaltet';
     el.style.color = 'var(--text-light)';
   } else if (Notification.permission === 'denied') {
     el.textContent = '🚫 Benachrichtigungen blockiert – bitte in den Browser-Einstellungen erlauben';
@@ -2520,17 +2548,55 @@ function requestNotificationPermission() {
   // Called straight from the button click: no setTimeout in between, or iOS
   // Safari no longer treats this as a user gesture and rejects the request.
   Notification.requestPermission().then(perm => {
-    renderSettings();
     if (perm === 'granted') {
+      // Browsers may reset an unused permission back to 'default' on their own.
+      // Someone who then grants it again means yes, whatever the switch said
+      // before — otherwise this button would visibly do nothing.
+      state.settings.notifyEnabled = true;
+      save();
+      renderSettings();
       checkDueNotification();
       showToast('✅ Benachrichtigungen aktiviert 🤙');
     } else {
+      renderSettings();
       showToast('Benachrichtigungen bleiben aus');
     }
   }).catch(err => {
     console.warn('requestPermission failed:', err);
     showToast('⚠️ Berechtigung konnte nicht angefragt werden');
   });
+}
+
+// toggleNotifications()
+//   The app's own on/off switch, deliberately separate from
+//   requestNotificationPermission(): that one has to call
+//   Notification.requestPermission() as the first thing after the click, or iOS
+//   Safari drops the user gesture. Branching in front of it is exactly the edit
+//   that would break it later, so the two never share a function.
+//
+//   A granted permission cannot be withdrawn from script, so switching off only
+//   stops this app from posting anything. The browser settings stay the place
+//   to take the permission itself back.
+function toggleNotifications() {
+  const on = !state.settings.notifyEnabled;
+  state.settings.notifyEnabled = on;
+  // Switching back on should be allowed to warn about the period that is
+  // already running — same reasoning as a changed lead time in saveSettings().
+  if (on) state.settings.lastNotifiedFor = null;
+  save();
+
+  if (!on && navigator.serviceWorker) {
+    // Close a warning that is still standing, or switching off leaves it on
+    // screen until it is dismissed by hand.
+    navigator.serviceWorker.ready
+      .then(reg => reg.getNotifications({ tag: 'period-warning' }))
+      .then(ns => ns.forEach(n => n.close()))
+      .catch(err => console.warn('closing notifications failed:', err));
+  }
+
+  checkDueNotification();
+  renderSettings();
+  showToast(on ? '🔔 Benachrichtigungen eingeschaltet' : '🔕 Benachrichtigungen ausgeschaltet');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2560,6 +2626,7 @@ const ACTIONS = {
   'month-next':           () => changeMonth(1),
   'save-settings':        saveSettings,
   'enable-notifications': requestNotificationPermission,
+  'toggle-notifications': toggleNotifications,
   'export':               exportData,
   'share':                shareData,
   'pick-import-file':     () => document.getElementById('import-file-input').click(),

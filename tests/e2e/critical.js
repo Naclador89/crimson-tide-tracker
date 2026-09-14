@@ -368,6 +368,47 @@ const SEED = {
   check('ausserhalb des Warnfensters keine Meldung', n3 === 0, 'n=' + n3);
   await c4.close();
 
+  // The app's own off switch: inside the warning window, permission granted,
+  // and still nothing — the only state the browser permission cannot express.
+  const c6 = await browser.newContext({ timezoneId: 'Europe/Berlin' });
+  await c6.grantPermissions(['notifications'], { origin: BASE });
+  const p6 = await c6.newPage();
+  await p6.addInitScript(seed => {
+    const f = new Date('2026-09-23T10:00:00Z').getTime(); const D = Date;
+    Date = class extends D { constructor(...a) { if (!a.length) super(f); else super(...a); } static now() { return f; } };
+    localStorage.setItem('crimson-tide-tracker', JSON.stringify(
+      { ...seed, settings: { ...seed.settings, notifyEnabled: false } }));
+  }, SEED);
+  await p6.goto(U);
+  await p6.waitForTimeout(2500);
+  const off = await p6.evaluate(async () => ({
+    count: (await (await navigator.serviceWorker.ready).getNotifications()).length,
+    persisted: JSON.parse(localStorage.getItem('crimson-tide-tracker')).settings.notifyEnabled,
+  }));
+  check('ausgeschaltet -> keine Meldung im Warnfenster', off.count === 0, JSON.stringify(off));
+  check('notifyEnabled=false wird uebernommen', off.persisted === false, JSON.stringify(off));
+
+  // Switching back on must warn about the period that is already running.
+  await p6.evaluate(() => toggleNotifications());
+  await p6.waitForTimeout(1500);
+  const backOn = await p6.evaluate(async () => ({
+    count: (await (await navigator.serviceWorker.ready).getNotifications()).length,
+    persisted: JSON.parse(localStorage.getItem('crimson-tide-tracker')).settings.notifyEnabled,
+  }));
+  check('wieder eingeschaltet -> Warnung erscheint', backOn.count === 1, JSON.stringify(backOn));
+  check('notifyEnabled=true persistiert', backOn.persisted === true, JSON.stringify(backOn));
+
+  // Switching off again also takes the standing warning off the screen.
+  await p6.evaluate(() => toggleNotifications());
+  await p6.waitForTimeout(1500);
+  const offAgain = await p6.evaluate(async () => ({
+    count: (await (await navigator.serviceWorker.ready).getNotifications()).length,
+    persisted: JSON.parse(localStorage.getItem('crimson-tide-tracker')).settings.notifyEnabled,
+  }));
+  check('ausschalten schliesst die stehende Meldung', offAgain.count === 0, JSON.stringify(offAgain));
+  check('notifyEnabled=false persistiert', offAgain.persisted === false, JSON.stringify(offAgain));
+  await c6.close();
+
   const c3 = await browser.newContext({ timezoneId: 'Europe/Berlin' });
   const p3 = await c3.newPage();
   // Headless Chromium reports 'denied' by default, so drive the branch directly.
@@ -388,6 +429,25 @@ const SEED = {
     return { hidden: b.style.display === 'none', status: document.getElementById('notif-status').textContent };
   });
   check('Button verborgen + Hinweis bei permission=denied', denied.hidden && /blockiert/i.test(denied.status), JSON.stringify(denied));
+  const granted = await p3.evaluate(() => {
+    Object.defineProperty(Notification, 'permission', { get: () => 'granted', configurable: true });
+    const read = () => {
+      renderSettings();
+      const t = document.getElementById('notif-toggle-btn');
+      return { visible: t.style.display !== 'none', label: t.textContent,
+               status: document.getElementById('notif-status').textContent };
+    };
+    state.settings.notifyEnabled = true;  const on  = read();
+    state.settings.notifyEnabled = false; const off = read();
+    return { on, off, enableHidden: document.getElementById('notif-enable-btn').style.display === 'none' };
+  });
+  check('Umschalter bietet bei granted+an das Ausschalten an',
+    granted.on.visible && /ausschalten/i.test(granted.on.label) && /aktiv/.test(granted.on.status),
+    JSON.stringify(granted.on));
+  check('Umschalter bietet bei granted+aus das Einschalten an',
+    granted.off.visible && /einschalten/i.test(granted.off.label) && /ausgeschaltet/.test(granted.off.status),
+    JSON.stringify(granted.off));
+  check('Aktivieren-Button bleibt bei granted verborgen', granted.enableHidden, JSON.stringify(granted));
   await c3.close();
 
   // ══ Regression: core flows still work ══
