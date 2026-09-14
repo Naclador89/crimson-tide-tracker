@@ -120,7 +120,18 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
   nur ein Push-Dienst aufwecken, und der verlangt einen dauerhaft laufenden
   Server samt Domain. Das widerspricht dem Kern dieser App, also gibt es das
   bewusst nicht. Timer im Service Worker sind übrigens auch kein Ersatz — er
-  wird nach Sekunden Leerlauf beendet.
+  wird nach Sekunden Leerlauf beendet, und `TimestampTrigger` ist über den
+  Chrome-Origin-Trial nie hinausgekommen.
+
+  Der Aus-Schalter hängt deshalb an `settings.notifyEnabled` und nicht an der
+  Browser-Berechtigung: die lässt sich aus dem Skript nur erteilen, nie
+  zurücknehmen, und ohne eigenes Flag gäbe es aus der App keinen Weg zurück.
+  `checkDueNotification()` prüft es als Erstes und löscht dabei auch das Badge.
+  Zwei getrennte Knöpfe und zwei getrennte Funktionen: in
+  `requestNotificationPermission()` muss `Notification.requestPermission()` die
+  erste Anweisung nach dem Klick bleiben, sonst verwirft iOS Safari die
+  Nutzergeste — eine Verzweigung davor ist genau der Fehler, der später
+  hineingebaut würde.
 - **Theme**: Drei Einstellungen — Systemstandard, Hell, Dunkel. `system` ist
   kein drittes Farbschema, sondern das Fehlen einer Wahl: es löst gegen
   `prefers-color-scheme` auf und folgt einem Systemwechsel weiter zur Laufzeit,
