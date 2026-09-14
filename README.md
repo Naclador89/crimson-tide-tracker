@@ -3,6 +3,9 @@
 Zyklus-Tracker als installierbare Web-App. Alle Daten bleiben im `localStorage`
 des Geräts — kein Konto, kein Server, keine Netzwerkaufrufe.
 
+Die Oberfläche folgt standardmäßig dem Farbschema des Geräts; im Daten-Tab
+lässt sich stattdessen fest Hell oder Dunkel wählen.
+
 Die App besteht ausschließlich aus statischen Dateien und läuft vollständig auf
 GitHub Pages. Es gibt keinen Backend-Teil, und es soll auch keinen geben: was
 einen dauerhaft laufenden Dienst bräuchte, gehört nicht in dieses Projekt.
@@ -24,6 +27,14 @@ Die App wird statisch ausgeliefert (GitHub Pages), es gibt keinen Build-Schritt.
 `cycle-core.js` muss **vor** dem Inline-Skript geladen werden; es veröffentlicht
 seine Funktionen als Globals (so wie sie vorher inline definiert waren) und
 zusätzlich unter `CycleCore`.
+
+### Was im `localStorage` liegt
+
+| Schlüssel | Inhalt |
+| --- | --- |
+| `crimson-tide-tracker` | `state`: Zyklen und Einstellungen. Das — und nur das — enthält der Export |
+| `crimson-tide-tracker-theme` | `system`, `light` oder `dark`. Geräteeinstellung, bewusst außerhalb von `state` |
+| `crimson-tide-tracker-backup` | Kopie eines unlesbaren Payloads, angelegt von `load()`, wenn beschädigte Daten gefunden wurden |
 
 ## Version und Cache
 
@@ -51,10 +62,16 @@ eine CI mit Standardeinstellung hätte ihn durchgelassen.
 **Browser** (`tests/e2e/*.js`, Playwright) deckt ab, was ein Unit-Test nicht
 erreicht: Service-Worker-Registrierung, Offline-Betrieb, PWA-Manifest,
 Benachrichtigungen, Wiederherstellung nach beschädigtem `localStorage`,
-Tastaturbedienung und das gerenderte DOM. `critical`, `medium` und `small`
-entsprechen den Schweregraden eines Code-Reviews, `icons` prüft die Icons —
-beim maskierbaren pixelweise, dass außerhalb der mittleren 80 % nur
-Hintergrund liegt.
+Tastaturbedienung, Theme-Auswahl, Farbkontrast und das gerenderte DOM.
+`critical`, `medium` und `small` entsprechen den Schweregraden eines
+Code-Reviews, `icons` prüft die Icons — beim maskierbaren pixelweise, dass
+außerhalb der mittleren 80 % nur Hintergrund liegt.
+
+Zwei Prüfungen darin arbeiten flächendeckend statt an Einzelfällen, weil die
+Fehler, die sie fangen, auch flächendeckend auftraten: eine misst den Kontrast
+**jedes** sichtbaren Textknotens in allen Tabs gegen seinen tatsächlichen
+Hintergrund, die andere prüft, in welcher Parsephase das `data-theme`-Attribut
+erscheint — vor dem `<body>` oder danach.
 
 Voraussetzung für die Browsertests:
 
@@ -92,6 +109,36 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
   Server samt Domain. Das widerspricht dem Kern dieser App, also gibt es das
   bewusst nicht. Timer im Service Worker sind übrigens auch kein Ersatz — er
   wird nach Sekunden Leerlauf beendet.
+- **Theme**: Drei Einstellungen — Systemstandard, Hell, Dunkel. `system` ist
+  kein drittes Farbschema, sondern das Fehlen einer Wahl: es löst gegen
+  `prefers-color-scheme` auf und folgt einem Systemwechsel weiter zur Laufzeit,
+  eine ausdrückliche Wahl nicht mehr. Alles Weitere hängt am Attribut
+  `data-theme="light|dark"` auf `<html>`, nicht an einer Media Query — eine
+  Media Query lässt sich aus der UI nicht überstimmen. Drei Dinge, die dabei
+  leicht kaputtgehen:
+  - Gesetzt wird das Attribut zuerst vom Bootstrap-Skript im `<head>`, und das
+    muss **vor** dem `<body>` passieren: sonst erscheint die Seite hell und
+    springt einen Frame später um. Deshalb steht es dort inline und nicht im
+    Hauptskript am Seitenende.
+  - Dieses Skript wiederholt notgedrungen, was `readThemePref()` und
+    `applyTheme()` tun — oben im `<head>` existiert vom Hauptskript noch
+    nichts. Schlüssel, erlaubte Werte und Auflösungsregel müssen an beiden
+    Stellen gleich bleiben; ein Test speichert eine Auswahl, lädt neu und
+    prüft, dass das `<head>`-Skript sie übernimmt.
+  - Die Canvas-Diagramme backen ihre Farben beim Zeichnen ein. Nach einem
+    Themewechsel müssen sie neu gezeichnet werden (`repaintForTheme()`), sonst
+    bleibt das halbe Übersichts-Tab im alten Farbschema stehen.
+- **Farben**: Jede Farbe steht als CSS-Variable in `:root` und wird im
+  `:root[data-theme="dark"]`-Block überschrieben. Zwei Fallen: Eine
+  eingefärbte Fläche muss **immer auch ihre Schriftfarbe setzen** — erbt sie
+  `--text`, steht im Dark Mode Weiß auf Pastell. Und Inline-Styles (auch die
+  aus dem JS erzeugten Badges und Pills) lassen sich von keiner Media Query
+  überschreiben, also gehört dort `var(--…)` hinein statt eines Hex-Werts.
+  Deshalb gibt es die Paare `--day-*-bg`/`--day-*-ink` (Kalenderzellen) und
+  `--pill-*-bg`/`--pill-*-ink` (Pills und Badge). Die Chart-Palette `--ph-*`
+  ist davon getrennt: sie landet per `getComputedStyle` auf dem Canvas, der
+  kein `var()` auflösen kann. Ein Test fährt über jeden sichtbaren Textknoten
+  und besteht auf 4.5:1 im Dark Mode.
 - **Icons**: `icon-*.jpg` sind die normalen (`purpose: "any"`), die
   `icon-maskable-*.png` haben einen Sicherheitsrand und dürfen von Android
   beschnitten werden. Ein Icon darf nie beides gleichzeitig sein — wird ein
