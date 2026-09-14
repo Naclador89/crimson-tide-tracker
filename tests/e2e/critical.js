@@ -101,6 +101,136 @@ const SEED = {
   check('laedt offline aus dem Cache', offStatus === 200 && offlineOK, 'status=' + offStatus + ' rendered=' + offlineOK);
   await c1.setOffline(false);
 
+  // ══ K1c — Update-Angebot ══
+  //
+  // Der Kern: ein wartender Worker uebernimmt erst, wenn jedes Fenster der App
+  // geschlossen ist — oder wenn man ihm sagt, er soll das Warten ueberspringen.
+  // Auf dem Handy, das die PWA im Hintergrund haelt, ist der Knopf also der
+  // einzige Weg zum Update. Tat er nichts, kam nie eines an.
+  //
+  // Dafuer braucht es einen echten Deploy: eigener Server auf einer Kopie der
+  // App, in der die Version waehrend des Tests hochgezaehlt wird.
+  console.log('\n=== K1c Update-Angebot ===');
+  {
+    const fs = require('fs'), path = require('path'), os = require('os'), http = require('http');
+    const root = path.join(__dirname, '..', '..');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctt-update-'));
+    for (const f of fs.readdirSync(root)) {
+      if (f === 'tests' || f === '.git') continue;
+      const src = path.join(root, f);
+      if (fs.statSync(src).isFile()) fs.copyFileSync(src, path.join(dir, f));
+    }
+    const TYPES = { '.html': 'text/html', '.js': 'text/javascript',
+      '.webmanifest': 'application/manifest+json', '.json': 'application/json',
+      '.png': 'image/png', '.jpg': 'image/jpeg' };
+    const server = http.createServer((req, res) => {
+      let name = decodeURIComponent(req.url.split('?')[0]);
+      if (name === '/') name = '/index.html';
+      const file = path.join(dir, path.basename(name));
+      fs.readFile(file, (err, buf) => {
+        if (err) { res.writeHead(404); res.end('not found'); return; }
+        // no-store: der Browser-HTTP-Cache darf hier nichts verschleiern, der
+        // Service Worker ist das Einzige, was cachen soll.
+        res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
+                             'Cache-Control': 'no-store' });
+        res.end(buf);
+      });
+    });
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const base = 'http://127.0.0.1:' + server.address().port;
+    const idx = path.join(dir, 'index.html');
+    const version = () => (fs.readFileSync(idx, 'utf8')
+      .match(/<meta name="app-version" content="([^"]+)"/) || [, '?'])[1];
+
+    const c = await browser.newContext();
+    const p = await c.newPage();
+    const until = async (fn, ms = 15000) => {
+      const end = Date.now() + ms;
+      for (;;) {
+        try { if (await fn()) return true; } catch (e) {}
+        if (Date.now() > end) return false;
+        await p.waitForTimeout(250);
+      }
+    };
+    const shown = () => p.evaluate(() =>
+      document.getElementById('update-banner').classList.contains('show'));
+
+    await p.goto(base + '/index.html');
+    const controlled = await until(() => p.evaluate(() => !!navigator.serviceWorker.controller));
+    check('Worker uebernimmt die erste Seite', controlled, 'controller=' + controlled);
+    await p.waitForTimeout(500);
+    check('kein Update-Angebot bei frischer Installation', (await shown()) === false, '');
+
+    // Deploy: neue Version ausliefern. Die erste Anfrage bekommt noch die alte
+    // Seite aus dem Cache und frischt ihn im Hintergrund auf, erst die naechste
+    // sieht die neue — genau wie beim echten Start der App.
+    fs.writeFileSync(idx, fs.readFileSync(idx, 'utf8')
+      .replace(/(<meta name="app-version" content=")[^"]+/, '$19.9.9'));
+    const arrived = await until(async () => {
+      await p.reload();
+      await p.waitForTimeout(600);
+      return await p.evaluate(() =>
+        document.querySelector('meta[name="app-version"]').content === '9.9.9');
+    }, 20000);
+    check('neue Version erreicht die Seite', arrived, 'version im Verzeichnis=' + version());
+
+    const offered = await until(() => shown());
+    check('Update-Angebot erscheint', offered, '');
+
+    // Der eigentliche Fehler war, dass der Knopf nicht anklickbar war: er erbte
+    // pointer-events:none vom Toast. Ein solches Element liefert elementFromPoint
+    // nicht zurueck — der Tipper ging ins Leere.
+    const hittable = await p.evaluate(() => {
+      const b = document.getElementById('update-banner');
+      const r = b.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { treffer: hit === b, stattdessen: hit ? hit.id || hit.className || hit.tagName : null,
+               events: getComputedStyle(b).pointerEvents };
+    });
+    check('Knopf nimmt Klicks an', hittable.treffer === true, JSON.stringify(hittable));
+
+    // Echter Klick mit Trefferpruefung, kein dispatchEvent: nur so faellt auf,
+    // wenn der Knopf verdeckt oder nicht klickbar ist.
+    await p.click('#update-banner', { timeout: 5000 }).catch(() => {});
+    const took = await until(async () => {
+      const u = await p.evaluate(() => navigator.serviceWorker.controller
+        ? navigator.serviceWorker.controller.scriptURL : '');
+      return u.includes('v=9.9.9');
+    }, 15000);
+    check('Klick uebernimmt den neuen Worker', took, '');
+
+    // Der Klick laedt die Seite neu — bis das durch ist, wirft jedes evaluate.
+    // until() schluckt das und fragt weiter, statt den Test abstuerzen zu lassen.
+    const state = () => p.evaluate(() => ({
+      banner: document.getElementById('update-banner').classList.contains('show'),
+      version: document.querySelector('meta[name="app-version"]').content,
+      body: document.body.classList.contains('update-pending'),
+    }));
+    const gone = await until(async () => {
+      const r = await state();
+      return r.banner === false && r.body === false && r.version === '9.9.9';
+    });
+    check('Angebot verschwindet, sobald die App aktuell ist', gone,
+      JSON.stringify(await state().catch(() => 'Seite laedt noch')));
+
+    // Und der zweite Teil der Beschwerde: ein Angebot, das stehen bleibt,
+    // obwohl es nichts mehr anzuwenden gibt. Hier kuenstlich herbeigefuehrt —
+    // Banner an, aber kein wartender Worker. Beim naechsten Blick auf die App
+    // (visibilitychange) muss es von selbst verschwinden.
+    await p.evaluate(() => {
+      document.getElementById('update-banner').classList.add('show');
+      document.body.classList.add('update-pending');
+    });
+    await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    const selfHealed = await until(async () => (await state()).banner === false, 8000);
+    check('stehengebliebenes Angebot raeumt sich beim naechsten Start weg',
+      selfHealed, JSON.stringify(await state().catch(() => '?')));
+
+    await c.close();
+    await new Promise(r => server.close(r));
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
   // ══ K3 — manifest ══
   console.log('\n=== K3  Manifest ===');
   await p1.goto(U);
