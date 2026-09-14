@@ -112,22 +112,52 @@ const SEED = {
   {
     const { c, p } = await open();
     const counts = await p.evaluate(() => {
-      const hits = { home: 0, calendar: 0, cycles: 0, stats: 0, data: 0 };
+      const hits = { home: 0, calendar: 0, cycles: 0, stats: 0, settings: 0 };
       const wrap = (name, fn) => function (...a) { hits[name]++; return fn.apply(this, a); };
       renderHome = wrap('home', renderHome);
       renderCalendar = wrap('calendar', renderCalendar);
       renderCyclesList = wrap('cycles', renderCyclesList);
       renderStats = wrap('stats', renderStats);
-      renderSettings = wrap('data', renderSettings);
+      renderSettings = wrap('settings', renderSettings);
       TAB_RENDERERS.home = renderHome; TAB_RENDERERS.calendar = renderCalendar;
       TAB_RENDERERS.cycles = renderCyclesList; TAB_RENDERERS.stats = renderStats;
-      TAB_RENDERERS.data = renderSettings;
+      TAB_RENDERERS.settings = renderSettings;
       document.querySelector('[data-tab="calendar"]').click();
       return hits;
     });
     check('Tab-Wechsel rendert nur den Zieltab',
       counts.calendar === 1 && counts.stats === 0 && counts.cycles === 0 && counts.home === 0,
       JSON.stringify(counts));
+
+    // A card outside every .section belongs to no tab, and therefore shows
+    // under all of them. That was the case for a long time: one stray </div>
+    // cut export, import and reset out of the tab, leaving the "delete
+    // everything" button on every screen.
+    const orphans = await p.evaluate(() =>
+      [...document.querySelectorAll('.card')]
+        .filter(el => !el.closest('.section'))
+        .map(el => el.querySelector('.card-title')?.textContent.trim() || el.id || '?'));
+    check('jede Karte liegt in einem Tab', orphans.length === 0, orphans.join(' | '));
+
+    const loose = await p.evaluate(() => {
+      document.querySelector('[data-tab="home"]').click();
+      const btn = document.querySelector('[data-action="reset"]');
+      return { sichtbar: !!(btn && btn.getClientRects().length), tab: activeTab };
+    });
+    check('kein Loesch-Button auf der Uebersicht',
+      loose.sichtbar === false, JSON.stringify(loose));
+
+    // The order inside the options tab is what the menu structure says: first
+    // what the app does, then what happens to your data, destructive last.
+    const cards = await p.evaluate(() => {
+      document.querySelector('[data-tab="settings"]').click();
+      return [...document.querySelectorAll('#tab-settings .card .card-title')]
+        .map(t => t.textContent.replace(/[^\p{L}\s]/gu, '').trim());
+    });
+    check('Optionen-Tab zeigt die vier Karten in der geplanten Reihenfolge',
+      JSON.stringify(cards) === JSON.stringify(
+        ['Erscheinungsbild', 'Benachrichtigungen', 'Sicherung', 'App zurücksetzen']),
+      JSON.stringify(cards));
     await c.close();
   }
 
@@ -188,7 +218,7 @@ const SEED = {
     const acts = await p.evaluate(async () => {
       const fired = [];
       for (const k of Object.keys(ACTIONS)) { const o = ACTIONS[k]; ACTIONS[k] = () => fired.push(k); }
-      document.querySelector('[data-tab="data"]').click();
+      document.querySelector('[data-tab="settings"]').click();
       for (const el of document.querySelectorAll('[data-action]')) el.click();
       return { fired, buttons: document.querySelectorAll('[data-action]').length };
     });
@@ -423,7 +453,7 @@ const SEED = {
   console.log('\n=== Regression ===');
   {
     const { c, p, errs } = await open();
-    for (const t of ['calendar', 'cycles', 'stats', 'data', 'home']) {
+    for (const t of ['calendar', 'cycles', 'stats', 'settings', 'home']) {
       await p.evaluate(n => document.querySelector(`[data-tab="${n}"]`).click(), t);
       await p.waitForTimeout(200);
     }

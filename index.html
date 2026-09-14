@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.8.0">
+  <meta name="app-version" content="1.9.0">
   <!-- Theme bootstrap. Has to run here, in the head, before the body is
        painted: it stamps the resolved theme on <html>, and the CSS below keys
        off that attribute. Doing it from the main script at the end of the body
@@ -354,6 +354,15 @@
     display: flex; align-items: center; gap: 8px;
   }
   .card-title .icon { font-size: 1.2rem; }
+  /* Sub-heading inside a card, in the same key as the form labels. A div like
+     .card-title, deliberately: nothing inside these cards is a real heading
+     element, and half a heading hierarchy would be worse than none. */
+  .card-sub {
+    font-size: 0.8rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .5px;
+    color: var(--text-mid);
+    margin-bottom: 8px;
+  }
 
 
   .next-events { display: flex; flex-direction: column; gap: 8px; }
@@ -591,7 +600,7 @@
     <button class="tab"        role="tab" data-tab="calendar" id="tabbtn-calendar" aria-controls="tab-calendar" aria-selected="false">Kalender</button>
     <button class="tab"        role="tab" data-tab="cycles"   id="tabbtn-cycles"   aria-controls="tab-cycles"   aria-selected="false">Zyklen</button>
     <button class="tab"        role="tab" data-tab="stats"    id="tabbtn-stats"    aria-controls="tab-stats"    aria-selected="false">Statistik</button>
-    <button class="tab"        role="tab" data-tab="data"     id="tabbtn-data"     aria-controls="tab-data"     aria-selected="false">Daten</button>
+    <button class="tab"        role="tab" data-tab="settings" id="tabbtn-settings" aria-controls="tab-settings" aria-selected="false">Optionen</button>
   </nav>
 
   <!-- ══ HOME ══ -->
@@ -672,8 +681,8 @@
     </div>
   </div>
 
-  <!-- ══ DATEN ══ -->
-  <div id="tab-data" class="section" role="tabpanel" aria-labelledby="tabbtn-data" tabindex="0">
+  <!-- ══ OPTIONEN ══ -->
+  <div id="tab-settings" class="section" role="tabpanel" aria-labelledby="tabbtn-settings" tabindex="0">
     <div class="card">
       <div class="card-title"><span class="icon">🎨</span>Erscheinungsbild</div>
       <div class="form-group" style="max-width:260px">
@@ -691,7 +700,7 @@
       </p>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">⚙️</span>Einstellungen</div>
+      <div class="card-title"><span class="icon">🔔</span>Benachrichtigungen</div>
       <div class="form-group" style="max-width:260px;margin-bottom:14px">
         <label>Vorwarnung vor Periode</label>
         <div style="display:flex;align-items:center;gap:8px">
@@ -709,19 +718,16 @@
         Die Warnung erscheint, sobald du die App am oder nach dem Warntag öffnest.
       </p>
     </div>
-
-    </div>
     <div class="card">
-      <div class="card-title"><span class="icon">⬇️</span>Daten exportieren</div>
-      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:18px;line-height:1.6">Speichere eine Sicherungskopie aller eingetragenen Zyklen als JSON-Datei auf deinem Gerät.</p>
+      <div class="card-title"><span class="icon">💾</span>Sicherung</div>
+      <div class="card-sub">Exportieren</div>
+      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:14px;line-height:1.6">Speichere eine Sicherungskopie aller eingetragenen Zyklen als JSON-Datei auf deinem Gerät.</p>
       <div style="display:flex;flex-wrap:wrap;gap:10px">
         <button class="quick-btn" data-action="export" style="margin:0">⬇ Download</button>
         <button class="quick-btn secondary" id="share-btn" data-action="share" style="margin:0;display:none">🔗 Teilen</button>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">⬆️</span>Daten importieren</div>
-      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:18px;line-height:1.6">Lade eine zuvor exportierte JSON-Datei. Bestehende Einträge bleiben erhalten — nur neue Zyklen werden hinzugefügt.</p>
+      <div class="card-sub" style="margin-top:22px">Importieren</div>
+      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:14px;line-height:1.6">Lade eine zuvor exportierte JSON-Datei. Bestehende Einträge bleiben erhalten — nur neue Zyklen werden hinzugefügt.</p>
       <button class="quick-btn secondary" data-action="pick-import-file" style="margin:0">⬆ Datei auswählen</button>
       <input type="file" id="import-file-input" accept=".json" style="display:none">
     </div>
@@ -1984,7 +1990,7 @@ const TAB_RENDERERS = {
   calendar: renderCalendar,
   cycles:   renderCyclesList,
   stats:    renderStats,
-  data:     renderSettings,
+  settings: renderSettings,
 };
 
 function showTab(name, el) {
