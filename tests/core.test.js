@@ -10,10 +10,13 @@ const assert = require('node:assert');
 const core = require('../cycle-core.js');
 
 const {
-  dateStr, parseDate, addDays, diffDays, fmtDate, fmtRange, inDays, inDaysRange, todayStr,
+  dateStr, parseDate, addDays, diffDays, fmtDate, fmtRange, inDays, inDaysRange, inDaysSpan,
+  todayStr,
   sortCycles, cycleGaps, calcAvgCycle, calcAvgPeriod, calcCycleSpread, buildPhases,
+  cycleModel, startHalfWidth, predictNextCycle,
   makeDayClassifier, classifyDay, isValidCycle, normalPDF,
-  MIN_CYCLE, MAX_CYCLE, PMS_DAYS, MIN_GAPS_FOR_SPREAD,
+  MIN_CYCLE, MAX_CYCLE, PMS_DAYS, HELL_DAY_OFFSET, LUTEAL, FERTILE_BEFORE_OV, POPULATION,
+  RECENT_GAPS,
 } = core;
 
 const TZ = process.env.TZ || 'system default';
@@ -167,21 +170,19 @@ describe('cycle spread', () => {
     assert.deepEqual(gaps, [28], '207 days is a skipped month');
   });
 
-  test('a perfectly regular cycle has no spread', () => {
+  test('a perfectly regular cycle has no sample spread', () => {
     const s = calcCycleSpread(CYCLES);
     assert.equal(s.n, 3);
     assert.equal(s.mean, 28);
     assert.equal(s.sd, 0);
-    assert.equal(s.spread, 0, 'no range should be shown when there is nothing to spread');
   });
 
-  test('an irregular cycle reports a spread', () => {
+  test('an irregular cycle reports its sample spread', () => {
     // gaps 24, 36, 24, 35 → mean 29.75, sample sd ≈ 6.65
     const s = calcCycleSpread(mk(['2026-06-01', '2026-06-25', '2026-07-31', '2026-08-24', '2026-09-28']));
     assert.equal(s.n, 4);
     assert.ok(Math.abs(s.mean - 29.75) < 1e-9, String(s.mean));
     assert.ok(Math.abs(s.sd - 6.652) < 0.01, String(s.sd));
-    assert.equal(s.spread, 7);
   });
 
   test('uses the sample standard deviation, not the population one', () => {
@@ -190,32 +191,120 @@ describe('cycle spread', () => {
     assert.ok(Math.abs(s.sd - Math.sqrt(8)) < 1e-9, String(s.sd));
   });
 
-  test('too little data yields no spread at all', () => {
-    // Two gaps can differ wildly and still say nothing about variability.
-    const two = calcCycleSpread(mk(['2026-01-01', '2026-01-27', '2026-02-26']));
-    assert.equal(two.n, 2);
-    assert.ok(two.sd > 0, 'the deviation is computed');
-    assert.equal(two.spread, 0, 'but it is not shown below the threshold');
-
-    assert.equal(calcCycleSpread(mk(['2026-01-01', '2026-01-29'])).spread, 0);
-    assert.equal(calcCycleSpread([]).spread, 0);
+  test('a single gap has no spread, and no data falls back', () => {
+    assert.equal(calcCycleSpread(mk(['2026-01-01', '2026-01-29'])).sd, 0);
+    assert.equal(calcCycleSpread([]).sd, 0);
     assert.equal(calcCycleSpread([]).mean, 28, 'falls back like calcAvgCycle');
-  });
-
-  test('the threshold is what the constant says', () => {
-    const starts = ['2026-01-01'];
-    for (let i = 1; i <= MIN_GAPS_FOR_SPREAD; i++) {
-      starts.push(dateStr(addDays(starts[i - 1], 26 + (i % 3) * 3)));
-    }
-    assert.equal(calcCycleSpread(mk(starts.slice(0, MIN_GAPS_FOR_SPREAD))).n, MIN_GAPS_FOR_SPREAD - 1);
-    assert.equal(calcCycleSpread(mk(starts.slice(0, MIN_GAPS_FOR_SPREAD))).spread, 0);
-    assert.ok(calcCycleSpread(mk(starts)).spread > 0, 'one more gap and the range appears');
   });
 
   test('mean agrees with calcAvgCycle', () => {
     for (const c of [CYCLES, mk(['2026-06-01', '2026-06-25', '2026-07-31', '2026-08-24'])]) {
       assert.equal(Math.round(calcCycleSpread(c).mean), calcAvgCycle(c));
     }
+  });
+
+  test('a gap of about two usual cycles counts as a skipped month', () => {
+    // 28, 28, 56, 28: the 56 is one unrecorded period, not a 56-day cycle.
+    const starts = ['2026-01-01', '2026-01-29', '2026-02-26', '2026-04-23', '2026-05-21'];
+    assert.deepEqual(cycleGaps(mk(starts)), [28, 28, 28]);
+  });
+
+  test('a merely long cycle is kept', () => {
+    // 28, 28, 38, 28: 38 is not near a multiple of 28.
+    const starts = ['2026-01-01', '2026-01-29', '2026-02-26', '2026-04-05', '2026-05-03'];
+    assert.deepEqual(cycleGaps(mk(starts)), [28, 28, 38, 28]);
+  });
+
+  test('the skipped-month check needs a median worth trusting', () => {
+    // Two gaps: 28 and 56 — too little to call either the usual one.
+    assert.deepEqual(cycleGaps(mk(['2026-01-01', '2026-01-29', '2026-03-26'])), [28, 56]);
+  });
+});
+
+describe('prediction model', () => {
+  const mk = starts => starts.map((s, i) => ({ id: 'c' + i, start: s, end: null }));
+  const every = (from, gap, n) => {
+    const out = [from];
+    for (let i = 1; i < n; i++) out.push(dateStr(addDays(out[i - 1], gap)));
+    return mk(out);
+  };
+
+  test('without data it is the population', () => {
+    const m = cycleModel([]);
+    assert.equal(m.n, 0);
+    assert.equal(m.mean, POPULATION.cycle.mean);
+  });
+
+  test('one gap is pulled towards the population, not taken as the truth', () => {
+    const m = cycleModel(mk(['2026-01-01', '2026-01-23']));   // 22 days
+    assert.ok(m.mean > 22 && m.mean < POPULATION.cycle.mean, String(m.mean));
+  });
+
+  test('with many cycles the own mean dominates', () => {
+    const m = cycleModel(every('2025-01-01', 25, 13));
+    assert.ok(Math.abs(m.mean - 25) < 0.3, String(m.mean));
+  });
+
+  test('only the recent cycles count', () => {
+    // 12 old cycles of 34 days, then 12 of 26: the prediction follows the 26.
+    const old = every('2024-01-01', 34, 13);
+    const recent = every(old[old.length - 1].start, 26, 13).slice(1);
+    const m = cycleModel([...old, ...recent]);
+    assert.equal(m.n, RECENT_GAPS);
+    assert.ok(Math.abs(m.mean - 26) < 0.3, String(m.mean));
+  });
+
+  test('perfectly regular data still leaves some uncertainty', () => {
+    const m = cycleModel(every('2025-01-01', 28, 5));
+    assert.ok(m.sd > 0, 'three identical gaps do not prove a zero-variance cycle');
+  });
+
+  test('the range narrows with more data', () => {
+    const w = n => startHalfWidth(cycleModel(every('2024-01-01', 28, n + 1)), 1);
+    assert.ok(w(3) > w(6) && w(6) > w(12), `${w(3)} ${w(6)} ${w(12)}`);
+  });
+
+  test('the range is wider than ±1 sd, as an 80 % prediction interval must be', () => {
+    const cy = mk(['2026-06-01', '2026-06-25', '2026-07-31', '2026-08-24', '2026-09-28']);
+    const m = cycleModel(cy);
+    assert.ok(startHalfWidth(m, 1) > 1.28 * m.sd, String(startHalfWidth(m, 1)));
+  });
+
+  test('uncertainty grows with every cycle further ahead', () => {
+    const m = cycleModel(CYCLES);
+    const h = [1, 2, 3, 6].map(k => startHalfWidth(m, k));
+    for (let i = 1; i < h.length; i++) assert.ok(h[i] > h[i - 1], JSON.stringify(h));
+    // at least with √k
+    assert.ok(h[2] >= h[0] * Math.sqrt(3) - 1e-9, JSON.stringify(h));
+  });
+
+  test('predicts the next start with a range around it', () => {
+    const p = predictNextCycle(sortCycles(CYCLES), '2026-09-12');
+    assert.equal(p.start, '2026-09-25');
+    assert.ok(p.lo < p.start && p.hi > p.start, JSON.stringify(p));
+    assert.equal(p.overdue, 0);
+    assert.equal(p.coverage, 0.8);
+  });
+
+  test('a range never starts before today — a period that began would be recorded', () => {
+    const p = predictNextCycle(sortCycles(CYCLES), '2026-09-24');
+    assert.equal(p.lo, '2026-09-24');
+    assert.equal(p.start, '2026-09-25');
+  });
+
+  test('a late period is reported as overdue, not skipped', () => {
+    const p = predictNextCycle(sortCycles(CYCLES), '2026-09-27');
+    assert.equal(p.start, '2026-09-25', 'still the same period');
+    assert.equal(p.overdue, 2);
+    assert.equal(p.beyondRange, false);
+
+    const late = predictNextCycle(sortCycles(CYCLES), '2026-10-12');
+    assert.equal(late.overdue, 17);
+    assert.equal(late.beyondRange, true);
+  });
+
+  test('no cycles, no prediction', () => {
+    assert.equal(predictNextCycle([], '2026-09-12'), null);
   });
 });
 
@@ -225,6 +314,13 @@ describe('wording', () => {
     assert.equal(inDays(1), 'morgen');
     assert.equal(inDays(2), 'in 2 Tagen');
     assert.equal(inDays(-3), 'heute', 'a past date never reads as negative');
+  });
+
+  test('an asymmetric span reads the same way', () => {
+    assert.equal(inDaysSpan(3, 9), 'in 3–9 Tagen');
+    assert.equal(inDaysSpan(-2, 4), 'heute bis in 4 Tagen');
+    assert.equal(inDaysSpan(0, 1), 'heute bis in 1 Tag');
+    assert.equal(inDaysSpan(5, 5), 'in 5 Tagen');
   });
 
   test('a spread turns the count into a range', () => {
@@ -284,8 +380,47 @@ describe(`phase projection (TZ=${TZ})`, () => {
     assert.equal(p.start, '2026-06-05');
     assert.equal(p.end, '2026-06-09', 'real duration, not the average');
     assert.equal(p.pmsStart, dateStr(addDays(p.start, -PMS_DAYS)));
-    assert.equal(p.hellDay, dateStr(addDays(p.start, -7)));
-    assert.equal(p.ovulation, dateStr(addDays(p.start, -14)));
+    assert.equal(p.hellDay, dateStr(addDays(p.start, -HELL_DAY_OFFSET)));
+    assert.equal(p.ovulation, dateStr(addDays(p.start, -Math.round(LUTEAL.mean))),
+      'counted back by the measured luteal phase, not the textbook 14');
+    assert.equal(p.k, 0);
+    assert.equal(p.spread, 0, 'a recorded start is not uncertain');
+  });
+
+  test('the fertile window is the Wilcox window, widened by the luteal variation', () => {
+    const p = phases[0];
+    assert.ok(p.fertileStart <= dateStr(addDays(p.ovulation, -FERTILE_BEFORE_OV)), JSON.stringify(p));
+    assert.ok(p.fertileEnd >= p.ovulation, JSON.stringify(p));
+    const days = diffDays(p.fertileStart, p.fertileEnd) + 1;
+    // Calendar methods land at about 12 days (Standard Days Method: days 8–19).
+    assert.ok(days >= 10 && days <= 14, String(days));
+  });
+
+  test('projected cycles carry a growing range, and no fertile window past the next one', () => {
+    const proj = phases.filter(p => p.k > 0).sort((a, b) => a.k - b.k);
+    assert.equal(proj[0].k, 1);
+    for (let i = 1; i < proj.length; i++) assert.ok(proj[i].spread >= proj[i - 1].spread);
+    assert.ok(proj[0].fertileStart, 'the next cycle has a window');
+    const nextWindow = diffDays(proj[0].fertileStart, proj[0].fertileEnd);
+    assert.ok(nextWindow > diffDays(phases[0].fertileStart, phases[0].fertileEnd),
+      'wider than for a recorded cycle');
+    assert.equal(proj[1].fertileStart, null);
+  });
+
+  test('projection does not drift from rounding the mean', () => {
+    // Gaps alternate 28/29 → mean 28.5. Rounding it first projects 28 or 29
+    // days per cycle and is six days off after a year.
+    const starts = ['2025-01-01'];
+    for (let i = 1; i <= 12; i++) starts.push(dateStr(addDays(starts[i - 1], i % 2 ? 28 : 29)));
+    const cy = starts.map((s, i) => ({ id: 'd' + i, start: s, end: null }));
+    const m = cycleModel(cy);
+    const ph = buildPhases(cy, starts[12]);
+    const k12 = ph.find(p => p.k === 12);
+    assert.equal(k12.start, dateStr(addDays(starts[12], Math.round(12 * m.mean))));
+  });
+
+  test('nothing is invented before the first record', () => {
+    assert.ok(phases.every(p => p.start >= CYCLES[0].start));
   });
 
   test('projects the next period one average cycle past the last record', () => {
@@ -343,6 +478,18 @@ describe(`day classification (TZ=${TZ})`, () => {
     assert.equal(at(next.hellDay), 'hellDay');
     assert.equal(at(next.ovulation), 'ovulation');
     assert.equal(at(dateStr(addDays(next.start, -1))), 'pms');
+    assert.equal(at(next.fertileStart), 'fertile');
+  });
+
+  test('predicted period days report their range, recorded ones none', () => {
+    const next = phases.find(p => p.k === 1);
+    assert.equal(at.spread(next.start), next.spread);
+    assert.ok(at.spread(next.start) > 0);
+    assert.equal(at.spread(CYCLES[0].start), 0);
+  });
+
+  test('no phases before the first record', () => {
+    assert.equal(at(dateStr(addDays(CYCLES[0].start, -40))), 'unknown');
   });
 
   test('an open cycle counts for the expected duration, then stops', () => {

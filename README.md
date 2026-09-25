@@ -107,13 +107,13 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
   einzige Quelle dafür, welche Phase ein Tag hat. Kalender, Zeitstrahl und das
   Status-Badge greifen alle darauf zu. Keine zweite Implementierung danebenbauen.
 - **Zykluslängen**: `cycleGaps()` ist die einzige Stelle, die entscheidet, was
-  als plausible Zykluslänge zählt. Mittelwert, Schwankung und Statistiktab
-  bauen alle darauf auf.
-- **Prognose**: Ab drei Abständen wird die Vorhersage als Spanne gezeigt
-  (`calcCycleSpread`, Stichproben-Standardabweichung). Darunter bleibt es bei
-  einem Tag — zwei Messwerte sagen über Schwankung nichts aus. Eine Spanne von
-  ±7 Tagen sieht unbrauchbar aus, ist aber ehrlicher als ein exaktes Datum, das
-  die Daten nicht hergeben.
+  als plausible Zykluslänge zählt. Mittelwert, Schwankung, Prognose und
+  Statistiktab bauen alle darauf auf. Verworfen werden Abstände außerhalb
+  15–60 Tagen und — ab drei Abständen — solche, die etwa ein Vielfaches (≥ 2)
+  des Medians sind: das ist fast immer eine nicht eingetragene Periode.
+- **Prognose**: siehe unten. Kurz: nie ein exaktes Datum, immer eine
+  80-%-Spanne; nie „14 Tage vor der Periode" als Eisprung-Tatsache; nie eine
+  überfällige Periode stillschweigend durch die nächste ersetzen.
 - **Benachrichtigungen** erscheinen, wenn die App geöffnet oder in den
   Vordergrund geholt wird — nicht während sie geschlossen ist. Das ist eine
   Grenze von reinem Static-Hosting, kein Fehler: ein geschlossenes Gerät kann
@@ -169,3 +169,46 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
   Ein Test prüft, dass außerhalb der mittleren 80 % nur Hintergrund liegt.
 - **Berechtigungsdialoge** brauchen eine echte Nutzergeste, sonst lehnt iOS
   Safari sie ab.
+
+## Prognosemodell
+
+Alles in `cycle-core.js`; jede Zahl steht dort mit Quelle in einem Block
+`REFERENCE VALUES`.
+
+**Zykluslänge.** Normalmodell mit konjugiertem Prior (Normal /
+skaliert-invers-χ²) über die letzten 12 Abstände (`cycleModel`). Der
+Bevölkerungsmittelwert zählt wie ein eigener Zyklus, die Streuung startet bei
+3 Tagen mit dem Gewicht von zwei Freiheitsgraden. Mit wenigen Daten ist die
+Prognose deshalb vorsichtig, mit einem Dutzend Zyklen praktisch die eigene
+Stichprobe. Die nächste Zykluslänge folgt dann einer Student-t-Verteilung; die
+angezeigte Spanne ist deren 80-%-Prognoseintervall, inklusive der Unsicherheit
+über den Mittelwert selbst (`√(1 + 1/κ)`). Für den k-ten Zyklus voraus wächst
+die Varianz mit `k + k²/κ` — im Kalender werden solche Tage gestrichelt, sobald
+die Spanne länger ist als die Periode.
+
+**Überfällig.** Eine Periode, deren erwarteter Start vorbei ist, bleibt die
+nächste Periode — die App zeigt „überfällig seit n Tagen" und ob das noch in
+der Spanne liegt. Vorher sprang sie still einen Monat weiter. Der untere Rand
+der Spanne liegt nie vor heute: hätte die Periode begonnen, wäre sie
+eingetragen.
+
+**Eisprung und fruchtbares Fenster.** Rückwärts von der nächsten Periode um
+die Lutealphase gerechnet, 12,4 ± 2,5 Tage (Bull et al. 2019,
+*npj Digital Medicine* 2:83, 612 613 Zyklen) — die Lutealphase ist der stabile
+Teil des Zyklus. Das fruchtbare Fenster sind die sechs Tage bis einschließlich
+Eisprung (Wilcox et al. 1995, *NEJM* 333:1517), verbreitert um die
+Unsicherheit des Eisprungtags. Für eingetragene Zyklen ergibt das rund 12 Tage,
+in der Größenordnung der Standard-Days-Methode (Tag 8–19). Mehr als einen
+Zyklus voraus wird kein Fenster mehr eingezeichnet. **Das ist eine
+Kalenderschätzung, keine Verhütungsmethode**, und die App sagt das auch.
+
+**PMS / Hell Day.** PMS = fünf Tage vor der Periode (ACOG-Definition). Der
+„Hell Day" eine Woche vorher ist eine Faustregel der App, keine klinische
+Größe.
+
+**Grenzen / Ausblick.** Aus reinen Kalenderdaten ist der Eisprung prinzipiell
+nur auf einige Tage genau bestimmbar (Wilcox et al. 2000, *BMJ* 321:1259).
+Deutlich besser würde es nur mit Messwerten: positive LH-Tests oder
+Basaltemperatur würden die eigene Lutealphase messbar machen und das Fenster
+stark verengen. Hormonelle Verhütung, Stillzeit oder Perimenopause machen die
+Prognose bedeutungslos; das erkennt die App nicht.

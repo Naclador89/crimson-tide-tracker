@@ -258,6 +258,11 @@ const SEED = {
   for (const tz of ['Europe/Berlin', 'UTC', 'America/New_York', 'Pacific/Auckland']) {
     const c = await browser.newContext({ timezoneId: tz });
     const p = await c.newPage();
+    // Fixed clock: the expected dates below depend on "today".
+    await p.addInitScript(() => {
+      const f = new Date('2026-09-12T12:00:00Z').getTime(); const D = Date;
+      Date = class extends D { constructor(...a) { if (!a.length) super(f); else super(...a); } static now() { return f; } };
+    });
     await p.addInitScript(seed => localStorage.setItem('crimson-tide-tracker', JSON.stringify(seed)), SEED);
     await p.goto(U);
     await p.waitForTimeout(600);

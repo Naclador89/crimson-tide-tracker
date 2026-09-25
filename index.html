@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.9.2">
+  <meta name="app-version" content="1.10.0">
   <!-- Theme bootstrap. Has to run here, in the head, before the body is
        painted: it stamps the resolved theme on <html>, and the CSS below keys
        off that attribute. Doing it from the main script at the end of the body
@@ -473,6 +473,9 @@
      ink to inherit is what painted --text (near-white in dark mode) onto the
      pale PMS, follicular and luteal cells. */
   .cal-day.predicted-period { background: var(--day-pred-bg); color: var(--day-pred-ink); }
+  /* A projected period whose range is wider than the period itself — usually
+     one more than a cycle out — is marked as a rough guess, not a date. */
+  .cal-day.uncertain:not(.today) { border-style: dashed; border-color: var(--day-pred-ink); }
   .cal-day.predicted-pms { background: var(--day-pms-bg); color: var(--day-pms-ink); }
   .cal-day.hell-day { background: var(--day-hell-bg); color: var(--day-hell-ink); font-weight: 700; }
   .cal-day.fertile-day { background: var(--day-fertile-bg); color: var(--day-fertile-ink); }
@@ -484,6 +487,7 @@
   .cal-legend { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
   .legend-item { display:flex;align-items:center;gap:5px;font-size:0.75rem;color:var(--text-mid); }
   .legend-dot { width:12px;height:12px;border-radius:50%; }
+  .cal-note { font-size:0.72rem; color:var(--text-light); margin:10px 0 0; line-height:1.45; }
 
   /* ── CYCLES LIST ── */
   .cycle-list { display:flex;flex-direction:column;gap:10px; }
@@ -675,7 +679,11 @@
         <div class="legend-item"><div class="legend-dot" style="background:var(--day-hell-bg)"></div>Hell Day</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--day-ov-bg)"></div>Eisprung</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--day-fertile-bg);border:1.5px solid var(--day-ov-bg)"></div>Fruchtbare Phase</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--day-pred-bg);border:1.5px dashed var(--day-pred-ink)"></div>Grobe Schätzung</div>
       </div>
+      <p class="cal-note">Prognosen sind Wahrscheinlichkeiten, keine Termine. Eisprung und fruchtbare
+        Phase sind Kalenderschätzungen ohne Messung — <strong>keine Verhütungsmethode</strong>.
+        Gestrichelt: die Unsicherheit ist größer als die Periode selbst lang ist — nur eine grobe Schätzung.</p>
     </div>
   </div>
 
@@ -1034,45 +1042,13 @@ function showToast(msg) {
 // ══════════════════════════════════════════════════════════
 // PREDICTION ENGINE
 //
-// PMS_DAYS — how many days before the predicted period start PMS begins.
-//
-// buildAllPhases(monthYear?, monthMonth?)
-//   Core prediction function. Generates predicted cycle entries
-//   (NOT real recorded ones) by extrapolating forward and backward
-//   from the last recorded cycle anchor using the user's average
-//   cycle length and period duration.
-//   Returns an array of phase objects:
-//     { start, end, pmsStart, hellDay, ovulation }
-//   where:
-//     start/end   — predicted period window
-//     pmsStart    — 5 days before start
-//     hellDay     — 7 days before start (mid-luteal mood dip)
-//     ovulation   — 14 days before start
-//   Optional monthYear/monthMonth extend the prediction window
-//   to cover a specific calendar month (used by renderCalendar).
-//
-// classifyDay(ds, cycles, allPhases, avgCycle, avgPeriod)
-//   Single source of truth for day classification.
-//   Used by BOTH drawTimeline (canvas) and renderCalendar (HTML)
-//   to guarantee consistent colouring.
-//   Priority: period > predPeriod > hellDay > pms >
-//             ovulation > fertile > unknown
-//
-// getCurrentPhase()
-//   Classifies today's phase for the status badge.
-//   Returns { phase, label, color } matching phaseColors keys.
+// Lives in cycle-core.js; the method and its sources are documented there
+// and in the README. In short:
+//   predictNextCycle()  next start with an 80 % range, "overdue" when late
+//   buildPhases()       recorded (k = 0) and projected (k ≥ 1) phases, each
+//                       projected one with the half-width of its range
+//   makeDayClassifier() single source of truth for day colouring
 // ══════════════════════════════════════════════════════════
-
-// buildAllPhases(monthYear?, monthMonth?)
-// Returns phase entries used for calendar/timeline colouring.
-// Combines two sources:
-//   1. REAL phases — PMS/ovulation/hellDay derived from every actual
-//      recorded cycle start date (these phases always happened).
-//   2. PREDICTED phases — extrapolated forward and backward from the
-//      last recorded cycle for gaps where no data exists.
-// Real phases always take priority over predicted ones in classifyDay().
-
-
 
 // Label and badge colour for each classifyDay() key. Predicted and recorded
 // periods share a phase id so callers can test for "period" without caring
@@ -1228,7 +1204,7 @@ function drawHormones() {
   // ── Phase background bands ──
   // follicular = days 0..ovulation, luteal = ovulation..end
   // We map day-in-cycle to an x position
-  const ovDay = avgCycle - 14; // typically day 14 in a 28-day cycle
+  const ovDay = avgCycle - Math.round(LUTEAL.mean); // counted back from the next period
   for (let i = 0; i < totalDays; i++) {
     const ds = dateStr(addDays(t, i - halfSpan));
     let dic = ovDay; // default mid-follicular
@@ -1603,10 +1579,10 @@ function renderHome() {
   const last    = cycles[cycles.length-1];
   const dayNum  = last ? diffDays(last.start, t) + 1 : '–';
 
-  // Pick the next predicted cycle (soonest start >= today)
-  const np = allPhases
-    .filter(p => p.start >= t)
-    .sort((a,b) => a.start > b.start ? 1 : -1)[0] || null;
+  // The next projected cycle — the one after the last record, even when its
+  // expected start has passed. Picking "the soonest start from today on"
+  // skipped a late period silently and announced the one after it instead.
+  const np = allPhases.find(p => p.k === 1) || null;
   // var() rather than literals: this is an inline style, so a dark-mode CSS
   // rule could not override it — the badge would stay a pastel blob with dark
   // text while everything around it went navy.
@@ -1650,32 +1626,59 @@ function renderHome() {
 
   // Next events pills — sorted by proximity
   let evHtml = '';
-  if (np) {
-    const dhell = diffDays(t, np.hellDay);
-    const dpms  = diffDays(t, np.pmsStart);
-    const dov   = diffDays(t, np.ovulation);
-    const dper  = diffDays(t, np.start);
-
-    // Every one of these is derived from the same predicted start, so they all
-    // carry the same uncertainty. Showing a hard date for something the data
-    // cannot pin down that precisely was the old behaviour; with enough
-    // recorded cycles the spread is shown instead.
-    const { spread } = CycleCore.calcCycleSpread(cycles);
-    const when  = d  => CycleCore.inDaysRange(d, spread);
-    const dates = ds => spread
-      ? fmtRange(dateStr(addDays(ds, -spread)), dateStr(addDays(ds, spread)))
-      : fmtDate(ds);
-
+  const pred = CycleCore.predictNextCycle(cycles, t);
+  if (np && pred) {
+    // Every event of the cycle hangs off the same uncertain start, so each is
+    // shown as the range the start's range implies, shifted by its offset.
+    // The fertile window comes from the phase entry: it also carries the
+    // luteal phase's own variation, so it is wider than the others.
     const events = [];
-    if (dov   >= 0) events.push({d: dov,   html: `<span class="event-pill ovulation">🌿 Eisprung ${when(dov)}</span>`});
-    if (dhell >= 0) events.push({d: dhell, html: `<span class="event-pill hell">😤 Hell Day ${when(dhell)} (${dates(np.hellDay)})</span>`});
-    if (dpms  >= 0) events.push({d: dpms,  html: `<span class="event-pill pms">🌕 PMS ${when(dpms)} (${dates(np.pmsStart)})</span>`});
-    if (dper  >= 0) events.push({d: dper,  html: `<span class="event-pill period">🩸 Periode ${when(dper)} (${dates(np.start)})</span>`});
+    const pill = (cls, text) => `<span class="event-pill ${cls}">${text}</span>`;
+    const span = (lo, hi) => ({
+      d: diffDays(t, lo),
+      when: CycleCore.inDaysSpan(diffDays(t, lo), diffDays(t, hi)),
+      dates: fmtRange(lo, hi),
+    });
+    const shifted = off => span(
+      dateStr(addDays(pred.lo, off)) < t ? t : dateStr(addDays(pred.lo, off)),
+      dateStr(addDays(pred.hi, off)));
 
-    // Say once where the range comes from, rather than on every pill.
-    if (spread) events.push({d: Infinity, html:
-      `<span style="font-size:.72rem;color:var(--text-light);padding:2px 4px">`
-      + `Spanne aus der Schwankung deiner letzten Zyklen (±${spread} ${spread === 1 ? 'Tag' : 'Tage'})</span>`});
+    if (pred.overdue > 0) {
+      const n = pred.overdue;
+      events.push({d: -1, html: pill('period',
+        `🩸 Periode seit ${n} ${n === 1 ? 'Tag' : 'Tagen'} überfällig (erwartet ${fmtDate(pred.start)})`)});
+      events.push({d: Infinity, html:
+        `<span style="font-size:.72rem;color:var(--text-light);padding:2px 4px">`
+        + (pred.beyondRange
+            ? 'Später als 80 % der Prognosen — schon begonnen? Dann unter „Zyklen“ eintragen.'
+            : `Liegt noch in der üblichen Spanne bis ${fmtDate(pred.hi)}.`)
+        + `</span>`});
+    } else {
+      const per = span(pred.lo, pred.hi);
+      events.push({d: per.d, html: pill('period', `🩸 Periode ${per.when} (${per.dates})`)});
+
+      const pms = shifted(-PMS_DAYS);
+      if (dateStr(addDays(pred.hi, -PMS_DAYS)) >= t)
+        events.push({d: pms.d, html: pill('pms', `🌕 PMS ${pms.when} (${pms.dates})`)});
+
+      const hell = shifted(-CycleCore.HELL_DAY_OFFSET);
+      if (dateStr(addDays(pred.hi, -CycleCore.HELL_DAY_OFFSET)) >= t)
+        events.push({d: hell.d, html: pill('hell', `😤 Hell Day ${hell.when} (${hell.dates})`)});
+
+      if (np.fertileEnd && np.fertileEnd >= t) {
+        const fw = span(np.fertileStart < t ? t : np.fertileStart, np.fertileEnd);
+        events.push({d: fw.d, html: pill('ovulation', `🌿 Fruchtbare Phase ${fw.when} (${fw.dates})`)});
+      }
+
+      // Say once where the ranges come from, rather than on every pill.
+      const basis = pred.n >= 3
+        ? `deinen letzten ${pred.n} Zyklen`
+        : (pred.n ? `erst ${pred.n} ${pred.n === 1 ? 'Zyklus' : 'Zyklen'} plus Durchschnittswerten`
+                  : 'Durchschnittswerten — trag mehr Zyklen ein');
+      events.push({d: Infinity, html:
+        `<span style="font-size:.72rem;color:var(--text-light);padding:2px 4px">`
+        + `Spannen: 80-%-Prognose aus ${basis}. Fruchtbare Phase: Kalenderschätzung, keine Verhütungsmethode.</span>`});
+    }
 
     events.sort((a, b) => a.d - b.d);
     evHtml = events.map(e => e.html).join('');
@@ -1745,10 +1748,14 @@ function renderCalendar() {
   for (let day=1;day<=lastDay.getDate();day++) {
     const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const key = classify(ds);
+    // A projected period whose range is wider than a typical period is a
+    // rough guess, and marked as one.
+    const spread = key === 'predPeriod' ? classify.spread(ds) : 0;
     let cls = 'cal-day';
     if (ds === t) cls += ' today';
     if (calClass[key]) cls += ' ' + calClass[key];
-    const label = [fmtDate(ds), phaseName[key], ds === t ? 'heute' : '']
+    if (spread > avgPeriod) cls += ' uncertain';
+    const label = [fmtDate(ds), phaseName[key], spread ? `± ${spread} Tage` : '', ds === t ? 'heute' : '']
       .filter(Boolean).join(', ');
     html += `<div class="${cls}" role="gridcell" tabindex="0" data-date="${ds}"`
           + ` aria-label="${label}" aria-current="${ds === t ? 'date' : 'false'}"`
@@ -1798,25 +1805,13 @@ function renderCyclesList() {
 // ══════════════════════════════════════════════════════════
 // RENDER STATS
 //
-// Population reference values from peer-reviewed literature:
-//   Cycle length:    mean=28.4d, SD=3.7d
-//                   (Vollman 1977; Münster et al. 1992; ~30 000 cycles)
-//   Period duration: mean=4.7d,  SD=1.4d
-//                   (Dasharathy et al. 2012, NICHD study)
+// Population reference values: POPULATION in cycle-core.js (with sources).
 //
 // drawNormalChart() plots a Gaussian distribution overlay comparing
 // the user's personal data against the population reference.
 // The coloured teal line marks the user's most recent value.
 // ══════════════════════════════════════════════════════════
-// Population reference values from literature
-// Cycle length: mean=28.4d, SD=3.7d  (Vollman 1977, Münster et al. 1992, ~30 000 cycles)
-// Period duration: mean=4.7d, SD=1.4d (Dasharathy et al. 2012, NICHD study)
-const POPULATION = {
-  cycle:    { mean: 28.4, std: 3.7 },
-  duration: { mean: 4.7,  std: 1.4 }
-};
-
-
+// POPULATION (reference curves) comes from cycle-core.js, with its sources.
 
 function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean, refStd, lastValue) {
   const canvas = document.getElementById(canvasId);
@@ -1841,7 +1836,9 @@ function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean
 
   // Determine x range covering both distributions
   const userMean = hasUser ? values.reduce((a,b)=>a+b,0)/values.length : refMean;
-  const userVar  = hasUser ? values.reduce((a,b)=>a+Math.pow(b-userMean,2),0)/values.length : refStd*refStd;
+  // Sample variance (n-1), the same definition the statistics tile uses —
+  // the two used to disagree on the same screen.
+  const userVar  = hasUser ? values.reduce((a,b)=>a+Math.pow(b-userMean,2),0)/(values.length-1) : refStd*refStd;
   const userStd  = hasUser ? Math.max(Math.sqrt(userVar), 0.5) : refStd;
 
   const xMin = Math.floor(Math.min(refMean - refStd*3.8, userMean - userStd*3.8));
@@ -1994,8 +1991,8 @@ function renderStats() {
   const lastCycleLen = lengths.length ? lengths[lengths.length-1] : null;
   const lastDuration = durations.length ? durations[durations.length-1] : null;
 
-  const avgLen = lengths.length ? Math.round(lengths.reduce((a,b)=>a+b,0)/lengths.length) : '–';
-  const avgDur = durations.length ? Math.round(durations.reduce((a,b)=>a+b,0)/durations.length) : '–';
+  const avgLen = lengths.length ? calcAvgCycle(cycles) : '–';
+  const avgDur = durations.length ? calcAvgPeriod(cycles) : '–';
 
   const { sd, n: nGaps } = CycleCore.calcCycleSpread(cycles);
   const grid = [
@@ -2006,13 +2003,15 @@ function renderStats() {
      label: 'Schwankung Zyklus'},
   ];
 
-  // Gaps outside MIN_CYCLE..MAX_CYCLE are treated as a skipped month and left
-  // out of the average. That is the right call, but it used to happen silently,
-  // so the numbers could not be reconciled with the entries.
+  // Gaps outside MIN_CYCLE..MAX_CYCLE, or about a multiple of the usual gap,
+  // are treated as a skipped month and left out of the average. That is the
+  // right call, but it used to happen silently, so the numbers could not be
+  // reconciled with the entries.
   const excluded = Math.max(0, cycles.length - 1 - lengths.length);
   const note = excluded > 0
     ? `<p style="grid-column:1/-1;font-size:.75rem;color:var(--text-light);text-align:center;margin-top:4px">
          ${excluded} ${excluded === 1 ? 'Abstand' : 'Abstände'} außerhalb von ${MIN_CYCLE}–${MAX_CYCLE} Tagen
+         oder von etwa einem Vielfachen des üblichen Abstands
          ${excluded === 1 ? 'wurde' : 'wurden'} als ausgelassener Monat gewertet und fließen nicht in den Durchschnitt ein.
        </p>`
     : '';
@@ -2461,12 +2460,11 @@ function checkDueNotification() {
 }
 
 // The soonest predicted period that has not started yet.
+// The period after the last record, even when it is already late — the
+// warning is keyed to it, so a late period is not skipped for the next one.
 function nextPredictedPeriod() {
   if (!sortedCycles().length) return null;
-  const t = today();
-  return buildAllPhases()
-    .filter(p => p.start > t)
-    .sort((a, b) => a.start > b.start ? 1 : -1)[0] || null;
+  return buildAllPhases().find(p => p.k === 1) || null;
 }
 
 // ══════════════════════════════════════════════════════════
