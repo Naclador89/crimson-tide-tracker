@@ -59,7 +59,10 @@ const SEED = {
   {
     const html = fs.readFileSync(ROOT + '/index.html');
     const b64 = (html.toString().match(/base64,[A-Za-z0-9+/=]*/g) || []).join('').length;
-    check('index.html unter 200 KB', html.length < 200_000, html.length + ' bytes');
+    // Raised from 200 KB with the 1.11 redesign (icon sprite, hero, history
+    // chart: ~29 KB of markup and code). What this budget is really after —
+    // assets smuggled in as base64 — is guarded by the share check below.
+    check('index.html unter 250 KB', html.length < 250_000, html.length + ' bytes');
     check('Base64-Anteil unter 50 %', b64 / html.length < 0.5,
       `${b64} von ${html.length} (${(100 * b64 / html.length).toFixed(0)}%)`);
     const faces = (html.toString().match(/@font-face/g) || []).length;

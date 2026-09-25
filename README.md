@@ -34,6 +34,7 @@ zusätzlich unter `CycleCore`.
 | --- | --- |
 | `crimson-tide-tracker` | `state`: Zyklen und Einstellungen. Das — und nur das — enthält der Export |
 | `crimson-tide-tracker-theme` | `system`, `light` oder `dark`. Geräteeinstellung, bewusst außerhalb von `state` |
+| `crimson-tide-tracker-hormones` | `open` oder `closed`: ob der (schematische) Hormonverlauf auf der Übersicht aufgeklappt ist. Geräteeinstellung wie das Theme |
 | `crimson-tide-tracker-backup` | Kopie eines unlesbaren Payloads, angelegt von `load()`, wenn beschädigte Daten gefunden wurden |
 
 ## Version und Cache
@@ -167,6 +168,15 @@ Playwright überspringt der Runner diesen Teil mit Hinweis statt zu scheitern.
   beschnitten werden. Ein Icon darf nie beides gleichzeitig sein — wird ein
   randloses Motiv als `maskable` deklariert, schneidet der Launcher hinein.
   Ein Test prüft, dass außerhalb der mittleren 80 % nur Hintergrund liegt.
+- **Navigation und Icons**: Es gibt genau **eine** Tab-Leiste (`.tabs`, fünf
+  `.tab`). Am Handy (< 768 px) rückt sie per CSS als feste Leiste nach unten,
+  darüber liegt nichts Zweites — Tastatur, ARIA und Tests hängen an diesem
+  einen Element. Icons kommen aus dem SVG-Sprite am Anfang von `<body>`
+  (`ico('name')` im Skript), nicht aus Emoji.
+- **Übersicht**: Der Hauptknopf der Hero-Karte wechselt seine `data-action`
+  zwischen `quick-start` und `quick-end`, je nachdem, ob gerade eine Periode
+  läuft. Schnelleinträge, Bearbeiten und Löschen bieten danach „Rückgängig“ an
+  (`offerUndo`) — deshalb fragt Löschen nicht mehr extra nach.
 - **Berechtigungsdialoge** brauchen eine echte Nutzergeste, sonst lehnt iOS
   Safari sie ab.
 

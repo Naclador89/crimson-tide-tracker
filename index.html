@@ -13,7 +13,7 @@
   <meta property="og:description" content="Pulled by the moon. Guided by data.">
   <meta property="og:image" content="./icon-512.jpg">
   <meta property="og:locale" content="de_DE">
-  <meta name="app-version" content="1.10.0">
+  <meta name="app-version" content="1.11.0">
   <!-- Theme bootstrap. Has to run here, in the head, before the body is
        painted: it stamps the resolved theme on <html>, and the CSS below keys
        off that attribute. Doing it from the main script at the end of the body
@@ -245,7 +245,7 @@
     --day-lut-bg:     #322a55;  --day-lut-ink:     #d5cbff;
 
     --pill-period-bg:  #5c2035;  --pill-period-ink:  #ffd0dc;
-    --pill-pms-bg:     #6a4d18;  --pill-pms-ink:     #ffeec2;
+    --pill-pms-bg:     #4a3a10;  --pill-pms-ink:     #ffe08a;
     --pill-hell-bg:    #5c2020;  --pill-hell-ink:    #ffc9c9;
     --pill-ov-bg:      #14493a;  --pill-ov-ink:      #a9ecd8;
     --pill-foll-bg:    #1c3450;  --pill-foll-ink:    #bcd8f8;
@@ -304,7 +304,9 @@
     color: var(--rose-ink);
     letter-spacing: -0.5px;
   }
-  header .subtitle { color: var(--text-mid); font-size: 0.85rem; }
+  header .subtitle { color: var(--text-mid); font-size: 0.85rem; display:flex; flex-direction:column; gap:2px; }
+  header .subtitle-2 { color: var(--text-light); }
+  header .logo { display:inline-block; vertical-align:middle; margin-right:8px; margin-bottom:2px; border-radius:50%; }
 
   /* ── NAV TABS ── */
   .tabs {
@@ -330,7 +332,9 @@
     white-space: nowrap;
     text-align: center;
     touch-action: manipulation;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   }
+  .tab .ico { width: 16px; height: 16px; }
   .tab.active {
     background: var(--rose);
     color: #fff;
@@ -369,12 +373,19 @@
 
 
   .next-events { display: flex; flex-direction: column; gap: 8px; }
+  /* One row per upcoming event: what on the left, when on the right. The
+     class keeps its old name — it is what the tests and the notes count. */
   .event-pill {
-    border-radius: 50px;
-    padding: 8px 16px;
-    font-size: 0.82rem; font-weight: 500;
-    display: flex; align-items: center; gap: 6px;
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    display: flex; align-items: center; gap: 10px;
   }
+  .event-pill .ev-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .event-pill .ev-title { flex: 1; font-weight: 600; }
+  .event-pill .ev-when { text-align: right; font-weight: 600; }
+  .event-pill .ev-dates { display: block; font-size: .75rem; font-weight: 500; }
+  .ev-note { font-size: .74rem; color: var(--text-light); line-height: 1.45; padding: 4px 2px 0; }
   .event-pill.pms { background: var(--pill-pms-bg); color: var(--pill-pms-ink); }
   .event-pill.period { background: var(--pill-period-bg); color: var(--pill-period-ink); }
   .event-pill.ovulation { background: var(--pill-ov-bg); color: var(--pill-ov-ink); }
@@ -500,13 +511,23 @@
     transition:border-color .2s;
   }
   .cycle-row:hover { border-color:var(--rose-ink); }
-  .cycle-row .dot { width:10px;height:10px;border-radius:50%;background:var(--rose);flex-shrink:0; }
-  .cycle-row .info { flex:1; }
-  .cycle-row .dates { font-weight:500; font-size:0.88rem; }
-  .cycle-row .meta { font-size:0.75rem;color:var(--text-light); }
+  .cycle-row .info { flex:1; min-width:0; }
+  .cycle-row .dates { font-weight:600; font-size:0.92rem; }
+  .cycle-row .meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .chip {
+    font-size:0.72rem; font-weight:500; padding:3px 9px; border-radius:50px;
+    background:var(--card); color:var(--text-mid); border:1px solid var(--border);
+  }
+  .chip.open { background:var(--pill-period-bg); color:var(--pill-period-ink); border-color:transparent; }
+  .year-head {
+    font-size:0.75rem; font-weight:700; letter-spacing:.6px; color:var(--text-light);
+    margin:10px 2px 0; text-transform:uppercase;
+  }
+  .year-head:first-child { margin-top:0; }
   .icon-btn {
     background:none;border:none;cursor:pointer;
-    font-size:1rem;padding:4px;border-radius:6px;
+    font-size:1rem;padding:10px;border-radius:10px;
+    display:inline-flex;
     color:var(--text-light);transition:all .15s;
   }
   .icon-btn:hover { color:var(--rose-ink);background:var(--rose-pale); }
@@ -521,6 +542,8 @@
   }
   .stat-box .s-val { font-family:'DM Serif Display',serif;font-size:1.6rem;color:var(--rose-ink); }
   .stat-box .s-label { font-size:0.75rem;color:var(--text-light);margin-top:3px; }
+  .stat-box .s-unit { font-family:'DM Sans',sans-serif; font-size:0.8rem; font-weight:500; margin-left:3px; }
+  .chart-info { text-align:center; font-size:.78rem; color:var(--text-light); margin-top:6px; }
 
   .chart-legend {
     display: flex; flex-wrap: wrap; gap: 14px;
@@ -620,6 +643,180 @@
   .cal-day:focus-visible { outline-offset: 1px; }
   .tab:focus-visible { outline-offset: -3px; }
 
+
+  /* ══ Design 1.11 ══════════════════════════════════════════ */
+  [hidden] { display: none !important; }
+
+  .ico {
+    width: 1.15em; height: 1.15em; flex-shrink: 0;
+    fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .card-title .ico { width: 20px; height: 20px; }
+  .quick-btn .ico { width: 18px; height: 18px; }
+  .card-text { font-size:.88rem; color:var(--text-mid); margin-bottom:14px; line-height:1.6; }
+  .note { font-size:.78rem; color:var(--text-light); line-height:1.5; margin-top:8px; }
+
+  /* ── Disclosure: long explanations stay one tap away ── */
+  details.more { margin-top: 12px; }
+  details.more > summary {
+    cursor: pointer; list-style: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: .8rem; font-weight: 600; color: var(--rose-ink);
+    padding: 6px 0; touch-action: manipulation;
+  }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::before {
+    content: ''; width: 7px; height: 7px;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg); transition: transform .2s; margin-right: 2px;
+  }
+  details.more[open] > summary::before { transform: rotate(45deg); }
+
+  /* ── Hero ── */
+  .hero-main { display: flex; align-items: center; gap: 20px; }
+  .ring { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .ring-track { stroke: var(--warm-white); }
+  .ring .ring-bar   { stroke: var(--rose); transition: stroke-dashoffset .6s ease; }
+  .ring .ring-late  { stroke: var(--danger); }
+  .ring-label {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    line-height: 1.1;
+  }
+  .ring-day  { font-family: 'DM Serif Display', serif; font-size: 2rem; color: var(--text); }
+  .ring-of   { font-size: .72rem; color: var(--text-light); }
+  .hero-text { min-width: 0; }
+  .hero-kicker { font-size: .75rem; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--text-light); }
+  .hero-big { font-family: 'DM Serif Display', serif; font-size: 1.65rem; line-height: 1.15; color: var(--rose-ink); margin: 2px 0 2px; }
+  .hero-sub { font-size: .85rem; color: var(--text-mid); margin-bottom: 10px; }
+  .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 18px; }
+  .hero-actions .quick-btn { margin: 0; }
+  .link-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer; padding: 10px 4px;
+    font-family: 'DM Sans', sans-serif; font-size: .85rem; font-weight: 600;
+    color: var(--rose-ink); touch-action: manipulation;
+  }
+  .link-btn:hover { text-decoration: underline; }
+  @media (max-width: 420px) {
+    .hero-main { gap: 14px; }
+    .ring { width: 96px; height: 96px; }
+    .ring-day { font-size: 1.6rem; }
+    .hero-big { font-size: 1.35rem; }
+    .hero-actions .quick-btn { flex: 1 1 100%; justify-content: center; }
+  }
+
+  /* ── Calendar extras ── */
+  .cal-header { gap: 8px; }
+  .cal-month { flex: 1; text-align: center; }
+  .cal-today {
+    background: none; border: 1.5px solid var(--border); border-radius: 50px;
+    padding: 6px 12px; font-family: 'DM Sans', sans-serif; font-size: .78rem; font-weight: 600;
+    color: var(--text-mid); cursor: pointer; touch-action: manipulation;
+  }
+  .cal-today:hover { border-color: var(--rose-ink); color: var(--rose-ink); }
+  .cal-hint { font-size: .75rem; color: var(--text-light); margin-top: 12px; }
+  .cal-grid { touch-action: pan-y; }
+
+  /* ── Settings stepper ── */
+  .stepper { display: flex; align-items: center; gap: 8px; }
+  .stepper input[type=number] { width: 64px; text-align: center; -moz-appearance: textfield; }
+  .stepper input::-webkit-outer-spin-button,
+  .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .step-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 1.5px solid var(--border); background: var(--card); color: var(--text);
+    font-size: 1.2rem; line-height: 1; cursor: pointer; touch-action: manipulation;
+  }
+  .step-btn:hover { border-color: var(--rose-ink); color: var(--rose-ink); }
+  .stepper-unit { font-size: .88rem; color: var(--text-mid); }
+
+  /* ── Entry dialog ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .chip-btn {
+    border: 1.5px solid var(--border); background: var(--card); color: var(--text-mid);
+    border-radius: 50px; padding: 7px 14px; cursor: pointer; touch-action: manipulation;
+    font-family: 'DM Sans', sans-serif; font-size: .82rem; font-weight: 600;
+  }
+  .chip-btn:hover, .chip-btn.active { border-color: var(--rose-ink); color: var(--rose-ink); background: var(--rose-tint); }
+  .label-opt { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-light); }
+  .btn-delete {
+    margin-right: auto; display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer; padding: 9px 4px;
+    font-family: 'DM Sans', sans-serif; font-size: .85rem; font-weight: 600; color: var(--danger-ink);
+  }
+  .modal-actions { align-items: center; }
+
+  /* ── Undo ── */
+  .undo-bar {
+    position: fixed; left: 16px; right: 16px; margin: 0 auto; width: fit-content;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(8px);
+    background: var(--text); color: var(--card);
+    border: none; border-radius: 50px; padding: 12px 20px;
+    font-family: 'DM Sans', sans-serif; font-size: .85rem; font-weight: 500;
+    box-shadow: var(--shadow-lg); cursor: pointer;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .25s, transform .25s, visibility .25s;
+    z-index: 9997;
+  }
+  .undo-bar.show { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); }
+  .undo-bar strong { color: var(--rose-pale); margin-left: 10px; }
+
+  /* ── Phones: compact header, bottom tab bar, bottom sheets ── */
+  @media (max-width: 767px) {
+    header { padding: 16px 0 12px; margin-bottom: 16px; border-bottom: none; }
+    header h1 { font-size: 1.5rem; }
+    header .logo { width: 34px; height: 34px; }
+    header .subtitle { display: none; }
+    .card { padding: 20px 18px; }
+
+    .tabs {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 500;
+      margin: 0; gap: 0; border-radius: 0; overflow: visible;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 20px rgba(15,29,53,.08);
+    }
+    .tab {
+      min-width: 0; flex-direction: column; gap: 3px;
+      padding: 6px 2px; border-radius: 12px; font-size: .68rem;
+    }
+    .tab .ico { width: 22px; height: 22px; }
+    .tab.active { background: var(--rose-tint); color: var(--rose-ink); box-shadow: none; font-weight: 700; }
+    .app { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+    .toast, .update-banner, .undo-bar { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+    body.update-pending .toast { bottom: calc(138px + env(safe-area-inset-bottom, 0px)); }
+    .toast, .update-banner { right: 16px; }
+
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal {
+      max-width: none; border-radius: 22px 22px 0 0; border-bottom: none;
+      padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+      transform: translateY(40px);
+    }
+  }
+
+  /* ── Wide screens: use the width ── */
+  @media (min-width: 900px) {
+    .app { max-width: 1040px; }
+    #tab-home.active {
+      display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: 18px; align-items: start;
+    }
+    #tab-home .card { margin-bottom: 0; }
+    #tab-home #timeline-card { grid-column: 1 / -1; }
+    #tab-stats.active { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+    #tab-stats .card { margin-bottom: 0; }
+    #tab-stats .stats-card { grid-column: 1 / -1; }
+    #tab-stats .stats-grid { grid-template-columns: repeat(4, 1fr); }
+    .cal-card { max-width: 640px; margin-left: auto; margin-right: auto; }
+    #tab-cycles .card, #tab-settings .card { max-width: 720px; margin-left: auto; margin-right: auto; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; transform: none !important; }
   }
@@ -627,51 +824,95 @@
 </style>
 </head>
 <body>
+<!-- Icon sprite. One set of line icons in currentColor instead of emoji:
+     emoji render differently on every platform and cannot follow the theme. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 16v-5M11 16V5M16 16V9M20 16v-3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+  <symbol id="i-curve" viewBox="0 0 24 24"><path d="M3 19c4 0 5-13 9-13s5 13 9 13"/><path d="M3 21h18"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21a2 2 0 0 0 4 0M3 3l18 18"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 2-.8 2-1.8 0-1.4-1.5-1.7-1.5-3 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 20V9M7 14l5-5 5 5M5 4h14"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.8l7.4-3.6M8.3 13.2l7.4 3.6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+</svg>
 <div class="app">
   <header>
-    <h1><img src="./logo.png" width="44" height="44" style="display:inline-block;vertical-align:middle;margin-right:8px;margin-bottom:2px;border-radius:50%"> Crimson Tide Tracker</h1>
-    <span class="subtitle" style="display:flex;flex-direction:column;gap:2px"><span>Pulled by the moon. Guided by data.</span><span style="opacity:.7">You can't stop the tide. You can track it.</span></span>
-
+    <h1><img src="./logo.png" width="44" height="44" alt="" class="logo"> Crimson Tide Tracker</h1>
+    <span class="subtitle"><span>Pulled by the moon. Guided by data.</span><span class="subtitle-2">You can't stop the tide. You can track it.</span></span>
   </header>
 
+  <!-- One tab strip for every width: a pill bar under the header on wide
+       screens, a fixed bottom bar within thumb reach on phones (CSS only). -->
   <nav class="tabs" role="tablist" aria-label="Bereiche">
-    <button class="tab active" role="tab" data-tab="home"     id="tabbtn-home"     aria-controls="tab-home"     aria-selected="true">Übersicht</button>
-    <button class="tab"        role="tab" data-tab="calendar" id="tabbtn-calendar" aria-controls="tab-calendar" aria-selected="false">Kalender</button>
-    <button class="tab"        role="tab" data-tab="cycles"   id="tabbtn-cycles"   aria-controls="tab-cycles"   aria-selected="false">Zyklen</button>
-    <button class="tab"        role="tab" data-tab="stats"    id="tabbtn-stats"    aria-controls="tab-stats"    aria-selected="false">Statistik</button>
-    <button class="tab"        role="tab" data-tab="settings" id="tabbtn-settings" aria-controls="tab-settings" aria-selected="false">Optionen</button>
+    <button class="tab active" role="tab" data-tab="home"     id="tabbtn-home"     aria-controls="tab-home"     aria-selected="true"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span>Übersicht</span></button>
+    <button class="tab"        role="tab" data-tab="calendar" id="tabbtn-calendar" aria-controls="tab-calendar" aria-selected="false"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg><span>Kalender</span></button>
+    <button class="tab"        role="tab" data-tab="cycles"   id="tabbtn-cycles"   aria-controls="tab-cycles"   aria-selected="false"><svg class="ico" aria-hidden="true"><use href="#i-list"/></svg><span>Zyklen</span></button>
+    <button class="tab"        role="tab" data-tab="stats"    id="tabbtn-stats"    aria-controls="tab-stats"    aria-selected="false"><svg class="ico" aria-hidden="true"><use href="#i-chart"/></svg><span>Statistik</span></button>
+    <button class="tab"        role="tab" data-tab="settings" id="tabbtn-settings" aria-controls="tab-settings" aria-selected="false"><svg class="ico" aria-hidden="true"><use href="#i-sliders"/></svg><span>Optionen</span></button>
   </nav>
 
   <!-- ══ HOME ══ -->
   <div id="tab-home" class="section active" role="tabpanel" aria-labelledby="tabbtn-home">
-    <div class="card" id="status-card">
-      <div class="card-title"><span class="icon">🏄‍♀️</span>Aktueller Status</div>
-      <div id="home-phase-badge" style="margin-bottom:12px"></div>
-      <canvas id="hormone-canvas" role="img" aria-label="Hormonverlauf im aktuellen Zyklus" style="width:100%;display:block;margin-bottom:2px"></canvas>
-      <canvas id="timeline-canvas" role="img" aria-label="Zeitstrahl der Zyklusphasen um heute" style="width:100%;display:block;border-radius:8px"></canvas>
-      <div id="timeline-legend" style="margin-top:10px"></div>
-      <div class="next-events" id="next-events" style="margin-top:14px"></div>
+    <!-- The answer to "when?" first, and the one action that matters right
+         now next to it. Filled by renderHome(). -->
+    <div class="card hero" id="status-card">
+      <div class="hero-main">
+        <div class="ring" id="cycle-ring" aria-hidden="true"></div>
+        <div class="hero-text">
+          <div class="hero-kicker" id="hero-kicker"></div>
+          <div class="hero-big" id="hero-big"></div>
+          <div class="hero-sub" id="hero-sub"></div>
+          <div id="home-phase-badge"></div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="quick-btn" id="hero-primary" data-action="quick-start"><svg class="ico" aria-hidden="true"><use href="#i-drop"/></svg><span>Periode beginnt heute</span></button>
+        <button class="link-btn" data-action="add-cycle"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg><span>Anderes Datum eintragen</span></button>
+      </div>
     </div>
 
-    <div class="card">
-      <div class="card-title"><span class="icon">⚡</span>Schnelleingabe</div>
-      <div style="display:flex;flex-direction:column;gap:10px;max-width:320px">
-        <button class="quick-btn" data-action="quick-start" style="margin:0">🔴 Periode beginnt heute</button>
-        <button class="quick-btn secondary" data-action="quick-end" style="margin:0">✅ Periode endet heute</button>
-        <button class="quick-btn secondary" data-action="add-cycle" style="margin:0">➕ Zyklus manuell eintragen</button>
-      </div>
+    <div class="card" id="events-card">
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg>Als Nächstes</div>
+      <div class="next-events" id="next-events"></div>
+    </div>
+
+    <div class="card" id="timeline-card">
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-activity"/></svg>Zyklusverlauf</div>
+      <canvas id="timeline-canvas" role="img" aria-label="Zeitstrahl der Zyklusphasen um heute" style="width:100%;display:block;border-radius:8px"></canvas>
+      <div id="timeline-legend" style="margin-top:10px"></div>
+      <details class="more" id="hormone-details">
+        <summary>Hormonverlauf anzeigen</summary>
+        <canvas id="hormone-canvas" role="img" aria-label="Hormonverlauf im aktuellen Zyklus (schematisch)" style="width:100%;display:block;margin-top:10px"></canvas>
+        <p class="note">Schematischer Verlauf nach Lehrbuch, auf deine Zykluslänge skaliert — keine Messung.</p>
+      </details>
     </div>
   </div>
 
   <!-- ══ CALENDAR ══ -->
   <div id="tab-calendar" class="section" role="tabpanel" aria-labelledby="tabbtn-calendar" tabindex="0">
-    <div class="card">
+    <div class="card cal-card">
       <div class="cal-header">
         <button class="cal-nav" data-action="month-prev" aria-label="Vorheriger Monat"><span aria-hidden="true">‹</span></button>
         <span class="cal-month" id="cal-month-label"></span>
+        <button class="cal-today" data-action="month-today">Heute</button>
         <button class="cal-nav" data-action="month-next" aria-label="Nächster Monat"><span aria-hidden="true">›</span></button>
       </div>
       <div class="cal-grid" id="cal-grid" role="grid" aria-label="Zykluskalender"></div>
+      <p class="cal-hint">Tippe auf einen Tag, um dort eine Periode einzutragen. Wischen wechselt den Monat.</p>
       <div class="cal-legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--rose)"></div>Periode (eingetragen)</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--day-pred-bg)"></div>Voraussicht. Periode</div>
@@ -681,31 +922,39 @@
         <div class="legend-item"><div class="legend-dot" style="background:var(--day-fertile-bg);border:1.5px solid var(--day-ov-bg)"></div>Fruchtbare Phase</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--day-pred-bg);border:1.5px dashed var(--day-pred-ink)"></div>Grobe Schätzung</div>
       </div>
-      <p class="cal-note">Prognosen sind Wahrscheinlichkeiten, keine Termine. Eisprung und fruchtbare
-        Phase sind Kalenderschätzungen ohne Messung — <strong>keine Verhütungsmethode</strong>.
-        Gestrichelt: die Unsicherheit ist größer als die Periode selbst lang ist — nur eine grobe Schätzung.</p>
+      <details class="more">
+        <summary>Wie genau ist das?</summary>
+        <p class="note">Prognosen sind Wahrscheinlichkeiten, keine Termine. Eisprung und fruchtbare
+          Phase sind Kalenderschätzungen ohne Messung — <strong>keine Verhütungsmethode</strong>.
+          Gestrichelt: die Unsicherheit ist größer als die Periode selbst lang ist — nur eine grobe Schätzung.</p>
+      </details>
     </div>
   </div>
 
   <!-- ══ CYCLES ══ -->
   <div id="tab-cycles" class="section" role="tabpanel" aria-labelledby="tabbtn-cycles" tabindex="0">
     <div class="card">
-      <div class="card-title"><span class="icon">📋</span>Eingetragene Zyklen</div>
-      <button class="quick-btn" data-action="add-cycle" style="margin-bottom:16px">➕ Zyklus hinzufügen</button>
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-list"/></svg>Eingetragene Zyklen</div>
+      <button class="quick-btn" data-action="add-cycle" style="margin-bottom:16px"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg><span>Zyklus hinzufügen</span></button>
       <div class="cycle-list" id="cycle-list"></div>
     </div>
   </div>
 
   <!-- ══ STATS ══ -->
   <div id="tab-stats" class="section" role="tabpanel" aria-labelledby="tabbtn-stats" tabindex="0">
-    <div class="card">
-      <div class="card-title"><span class="icon">📊</span>Statistiken</div>
+    <div class="card stats-card">
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-chart"/></svg>Statistiken</div>
       <div class="stats-grid" id="stats-grid"></div>
     </div>
+    <div class="card stats-card">
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-chart"/></svg>Zykluslänge je Zyklus</div>
+      <canvas id="chart-history" role="img" aria-label="Balkendiagramm der Zykluslängen" style="width:100%;display:block"></canvas>
+      <div id="chart-history-info" class="chart-info"></div>
+    </div>
     <div class="card">
-      <div class="card-title"><span class="icon">📈</span>Verteilung Zykluslänge</div>
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-curve"/></svg>Verteilung Zykluslänge</div>
       <canvas id="chart-cycle" height="140" style="width:100%;display:block"></canvas>
-      <div id="chart-cycle-info" style="text-align:center;font-size:.78rem;color:var(--text-light);margin-top:6px"></div>
+      <div id="chart-cycle-info" class="chart-info"></div>
       <div class="chart-legend">
         <span class="legend-entry"><span class="legend-line" style="background:var(--chart-curve-1);opacity:.85"></span>Deine Verteilung</span>
         <span class="legend-entry"><span class="legend-line" style="background:var(--chart-ref-stroke)"></span>Bevölkerungsschnitt</span>
@@ -713,9 +962,9 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">🩸</span>Verteilung Periodendauer</div>
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-drop"/></svg>Verteilung Periodendauer</div>
       <canvas id="chart-duration" height="140" style="width:100%;display:block"></canvas>
-      <div id="chart-duration-info" style="text-align:center;font-size:.78rem;color:var(--text-light);margin-top:6px"></div>
+      <div id="chart-duration-info" class="chart-info"></div>
       <div class="chart-legend">
         <span class="legend-entry"><span class="legend-line" style="background:var(--chart-curve-1);opacity:.85"></span>Deine Verteilung</span>
         <span class="legend-entry"><span class="legend-line" style="background:var(--chart-ref-stroke)"></span>Bevölkerungsschnitt</span>
@@ -727,7 +976,7 @@
   <!-- ══ OPTIONEN ══ -->
   <div id="tab-settings" class="section" role="tabpanel" aria-labelledby="tabbtn-settings" tabindex="0">
     <div class="card">
-      <div class="card-title"><span class="icon">🎨</span>Erscheinungsbild</div>
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-palette"/></svg>Erscheinungsbild</div>
       <div class="form-group" style="max-width:260px">
         <label for="settings-theme">Farbschema</label>
         <select id="settings-theme">
@@ -736,53 +985,56 @@
           <option value="dark">Dunkel</option>
         </select>
       </div>
-      <p style="font-size:.78rem;color:var(--text-light);margin-top:10px;line-height:1.5">
-        „Systemstandard“ folgt der Einstellung deines Geräts und wechselt mit ihr mit.
-        Die Auswahl gilt sofort und nur auf diesem Gerät — sie gehört nicht zu den
-        Zyklusdaten und ist deshalb auch nicht im Export enthalten.
-      </p>
+      <details class="more">
+        <summary>Mehr erfahren</summary>
+        <p class="note">„Systemstandard“ folgt der Einstellung deines Geräts und wechselt mit ihr mit.
+          Die Auswahl gilt sofort und nur auf diesem Gerät — sie gehört nicht zu den
+          Zyklusdaten und ist deshalb auch nicht im Export enthalten.</p>
+      </details>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">🔔</span>Benachrichtigungen</div>
-      <div class="form-group" style="max-width:260px;margin-bottom:14px">
-        <label>Vorwarnung vor Periode</label>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input type="number" id="settings-warn-days" min="1" max="14" step="1" value="3" style="width:70px">
-          <span style="font-size:.88rem;color:var(--text-mid)">Tage vorher</span>
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-bell"/></svg>Benachrichtigungen</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label for="settings-warn-days">Vorwarnung vor Periode</label>
+        <!-- Saved as soon as it changes, like the colour scheme: a separate
+             "Speichern" button for a single number was one step too many. -->
+        <div class="stepper">
+          <button class="step-btn" data-action="warn-dec" aria-label="Einen Tag weniger">−</button>
+          <input type="number" id="settings-warn-days" min="1" max="14" step="1" value="3" inputmode="numeric">
+          <button class="step-btn" data-action="warn-inc" aria-label="Einen Tag mehr">+</button>
+          <span class="stepper-unit">Tage vorher</span>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <button class="quick-btn" data-action="save-settings" style="margin:0">Speichern</button>
-        <button class="quick-btn secondary" id="notif-enable-btn" data-action="enable-notifications" style="margin:0;display:none">🔔 Benachrichtigungen aktivieren</button>
-        <button class="quick-btn secondary" id="notif-toggle-btn" data-action="toggle-notifications" style="margin:0;display:none">🔕 Benachrichtigungen ausschalten</button>
+        <button class="quick-btn secondary" id="notif-enable-btn" data-action="enable-notifications" style="margin:0;display:none"><svg class="ico" aria-hidden="true"><use href="#i-bell"/></svg><span>Benachrichtigungen aktivieren</span></button>
+        <button class="quick-btn secondary" id="notif-toggle-btn" data-action="toggle-notifications" style="margin:0;display:none"></button>
       </div>
       <div id="notif-status" style="font-size:.78rem;color:var(--text-light);margin-top:10px"></div>
-      <p style="font-size:.78rem;color:var(--text-light);margin-top:12px;line-height:1.5">
-        <strong>Die App kann dich nur warnen, während sie läuft oder wenn du sie öffnest</strong> — die Warnung erscheint also beim ersten Öffnen am oder nach dem Warntag, nicht von selbst mitten in der Nacht.
-        Eine geschlossene App könnte nur ein Push-Server aufwecken, und den gibt es hier bewusst nicht: alle Daten bleiben auf dem Gerät.
-      </p>
-      <p style="font-size:.78rem;color:var(--text-light);margin-top:8px;line-height:1.5">
-        Voraussetzung ist <strong>Android</strong> (Chrome, installierte PWA) oder <strong>iOS 16.4+</strong> mit der App auf dem Home-Screen.
-        Ausschalten wirkt nur in dieser App — die Berechtigung selbst nimmst du in den Browser-Einstellungen zurück.
-      </p>
+      <details class="more">
+        <summary>Wann erscheint die Warnung?</summary>
+        <p class="note"><strong>Die App kann dich nur warnen, während sie läuft oder wenn du sie öffnest</strong> — die Warnung erscheint also beim ersten Öffnen am oder nach dem Warntag, nicht von selbst mitten in der Nacht.
+          Eine geschlossene App könnte nur ein Push-Server aufwecken, und den gibt es hier bewusst nicht: alle Daten bleiben auf dem Gerät.</p>
+        <p class="note">Voraussetzung ist <strong>Android</strong> (Chrome, installierte PWA) oder <strong>iOS 16.4+</strong> mit der App auf dem Home-Screen.
+          Ausschalten wirkt nur in dieser App — die Berechtigung selbst nimmst du in den Browser-Einstellungen zurück.</p>
+      </details>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">💾</span>Sicherung</div>
+      <div class="card-title"><svg class="ico" aria-hidden="true"><use href="#i-archive"/></svg>Sicherung</div>
       <div class="card-sub">Exportieren</div>
-      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:14px;line-height:1.6">Speichere eine Sicherungskopie aller eingetragenen Zyklen als JSON-Datei auf deinem Gerät.</p>
+      <p class="card-text">Speichere eine Sicherungskopie aller eingetragenen Zyklen als JSON-Datei auf deinem Gerät.</p>
       <div style="display:flex;flex-wrap:wrap;gap:10px">
-        <button class="quick-btn" data-action="export" style="margin:0">⬇ Download</button>
-        <button class="quick-btn secondary" id="share-btn" data-action="share" style="margin:0;display:none">🔗 Teilen</button>
+        <button class="quick-btn" data-action="export" style="margin:0"><svg class="ico" aria-hidden="true"><use href="#i-download"/></svg><span>Download</span></button>
+        <button class="quick-btn secondary" id="share-btn" data-action="share" style="margin:0;display:none"><svg class="ico" aria-hidden="true"><use href="#i-share"/></svg><span>Teilen</span></button>
       </div>
       <div class="card-sub" style="margin-top:22px">Importieren</div>
-      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:14px;line-height:1.6">Lade eine zuvor exportierte JSON-Datei. Bestehende Einträge bleiben erhalten — nur neue Zyklen werden hinzugefügt.</p>
-      <button class="quick-btn secondary" data-action="pick-import-file" style="margin:0">⬆ Datei auswählen</button>
+      <p class="card-text">Lade eine zuvor exportierte JSON-Datei. Bestehende Einträge bleiben erhalten — nur neue Zyklen werden hinzugefügt.</p>
+      <button class="quick-btn secondary" data-action="pick-import-file" style="margin:0"><svg class="ico" aria-hidden="true"><use href="#i-upload"/></svg><span>Datei auswählen</span></button>
       <input type="file" id="import-file-input" accept=".json" style="display:none">
     </div>
     <div class="card" style="border:1.5px solid var(--danger-border)">
-      <div class="card-title" style="color:var(--danger-ink)"><span class="icon">🗑️</span>App zurücksetzen</div>
-      <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:18px;line-height:1.6">Löscht alle eingetragenen Zyklen unwiderruflich. Erstelle vorher eine Sicherungskopie über den Export.</p>
-      <button class="quick-btn" data-action="reset" style="margin:0;background:var(--danger);box-shadow:0 4px 16px rgba(160,14,43,0.3)">🗑️ Alle Daten löschen</button>
+      <div class="card-title" style="color:var(--danger-ink)"><svg class="ico" aria-hidden="true"><use href="#i-trash"/></svg>App zurücksetzen</div>
+      <p class="card-text" style="margin-bottom:18px">Löscht alle eingetragenen Zyklen unwiderruflich. Erstelle vorher eine Sicherungskopie über den Export.</p>
+      <button class="quick-btn" data-action="reset" style="margin:0;background:var(--danger);box-shadow:0 4px 16px rgba(160,14,43,0.3)"><svg class="ico" aria-hidden="true"><use href="#i-trash"/></svg><span>Alle Daten löschen</span></button>
     </div>
   </div>
 
@@ -805,17 +1057,25 @@
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-title" id="modal-title">Zyklus eintragen</div>
+    <div class="chips" id="m-chips" role="group" aria-label="Beginn schnell wählen">
+      <button class="chip-btn" data-action="start-0">Heute</button>
+      <button class="chip-btn" data-action="start-1">Gestern</button>
+      <button class="chip-btn" data-action="start-2">Vorgestern</button>
+    </div>
     <div class="form-grid">
       <div class="form-group">
-        <label>Periodenbeginn</label>
+        <label for="m-start">Periodenbeginn</label>
         <input type="date" id="m-start" >
       </div>
       <div class="form-group">
-        <label>Periodenende</label>
+        <label for="m-end">Periodenende <span class="label-opt">(optional)</span></label>
         <input type="date" id="m-end">
       </div>
     </div>
     <div class="modal-actions">
+      <!-- Deleting lives in the edit dialog, not next to the pencil in every
+           row, where it was one slip of the thumb away. -->
+      <button class="btn-delete" id="m-delete" data-action="delete-editing" hidden><svg class="ico" aria-hidden="true"><use href="#i-trash"/></svg><span>Löschen</span></button>
       <button class="btn-cancel" data-action="close-modal">Abbrechen</button>
       <button class="save-btn" data-action="save-modal" style="margin-top:0">Speichern</button>
     </div>
@@ -824,6 +1084,9 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- Undo for the last change. A real button like the update banner, for the
+     same reason: the toast is deliberately not clickable. -->
+<button class="undo-bar" id="undo-bar" data-action="undo" type="button"></button>
 <!-- Bewusst ein eigenes Element und ein echter Button, nicht der Toast: der
      Toast ist eine fluechtige, absichtlich nicht anklickbare Live-Region
      (pointer-events:none). Beides in einem Element hiess, dass das
@@ -857,6 +1120,8 @@ let state = {
 // and the clock. These three wrappers supply them, so the rest of the app
 // calls sortedCycles()/buildAllPhases()/today() exactly as before.
 function sortedCycles()  { return CycleCore.sortCycles(state.cycles); }
+// Inline icon from the sprite at the top of <body>.
+function ico(name) { return `<svg class="ico" aria-hidden="true"><use href="#i-${name}"/></svg>`; }
 function today()         { return CycleCore.todayStr(); }
 function buildAllPhases(monthYear, monthMonth) {
   return CycleCore.buildPhases(sortedCycles(), today(), monthYear, monthMonth);
@@ -1178,6 +1443,7 @@ function drawHormones() {
   const lastCycle = cycles.length ? cycles[cycles.length - 1] : null;
 
   const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = '100%';   // see drawTimeline: never measure a pinned width
   const W   = canvas.offsetWidth;
   const H   = 110;
   canvas.width        = W * dpr;
@@ -1452,6 +1718,10 @@ function drawTimeline() {
   const canvas = document.getElementById('timeline-canvas');
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
+  // Measure the layout width, not the pixel width a previous draw pinned —
+  // a draw while the tab was hidden (resize, theme switch) fell back to 340px
+  // and every later draw measured that back.
+  canvas.style.width = '100%';
   const W = canvas.offsetWidth || canvas.parentElement.offsetWidth || 340;
   const H = 88;
   canvas.width  = W * dpr;
@@ -1521,9 +1791,13 @@ function drawTimeline() {
       const lbl = offsetFromToday === 0
         ? 'Heute'
         : `${d.getDate()}.${d.getMonth()+1}.`;
+      // Keep the outermost labels inside the canvas instead of cutting them.
       const x = (i + 0.5) * dayW;
+      const w = ctx.measureText(lbl).width;
+      ctx.textAlign = x - w / 2 < 0 ? 'left' : x + w / 2 > W ? 'right' : 'center';
       ctx.fillStyle = offsetFromToday === 0 ? ink : muted;
-      ctx.fillText(lbl, x, labelY);
+      ctx.fillText(lbl, ctx.textAlign === 'left' ? 0 : ctx.textAlign === 'right' ? W : x, labelY);
+      ctx.textAlign = 'center';
     }
   }
 
@@ -1577,12 +1851,62 @@ function renderHome() {
   const phase   = getCurrentPhase();
   const t       = today();
   const last    = cycles[cycles.length-1];
-  const dayNum  = last ? diffDays(last.start, t) + 1 : '–';
+  const dayNum  = last ? diffDays(last.start, t) + 1 : null;
+  const pred    = CycleCore.predictNextCycle(cycles, t);
+  const cycleLen = Math.round(CycleCore.cycleModel(cycles).mean);
 
   // The next projected cycle — the one after the last record, even when its
   // expected start has passed. Picking "the soonest start from today on"
   // skipped a late period silently and announced the one after it instead.
   const np = allPhases.find(p => p.k === 1) || null;
+
+  // A period that was started and not yet ended. Only offered for closing
+  // while it is plausibly still running — an entry whose end was simply
+  // never recorded weeks ago should not turn the main button into "ends today".
+  const running = last && !last.end && dayNum >= 1 && dayNum <= 14 ? last : null;
+
+  // ── Hero: the answer first ──
+  let kicker, big, sub;
+  if (!last) {
+    kicker = 'Los geht’s';
+    big    = 'Wann hat deine letzte Periode begonnen?';
+    sub    = 'Trag sie ein — danach berechnet die App deine Prognose.';
+  } else if (running) {
+    kicker = 'Aktuell';
+    big    = `Periode, Tag ${dayNum}`;
+    sub    = `Ø Dauer ${calcAvgPeriod(cycles)} Tage — tippe auf „endet heute“, wenn sie vorbei ist.`;
+  } else if (pred.overdue > 0) {
+    kicker = 'Nächste Periode';
+    big    = `überfällig seit ${pred.overdue} ${pred.overdue === 1 ? 'Tag' : 'Tagen'}`;
+    sub    = `erwartet am ${fmtDate(pred.start)}`;
+  } else {
+    const span = CycleCore.inDaysSpan(diffDays(t, pred.lo), diffDays(t, pred.hi));
+    kicker = 'Nächste Periode';
+    big    = span.charAt(0).toUpperCase() + span.slice(1);
+    sub    = `${fmtRange(pred.lo, pred.hi).replace(/\s\d{4}$/, '')} · 80-%-Spanne`;
+  }
+  document.getElementById('hero-kicker').textContent = kicker;
+  document.getElementById('hero-big').textContent = big;
+  document.getElementById('hero-sub').textContent = sub;
+
+  // Cycle ring: how far into the expected cycle today is.
+  const R = 52, C = 2 * Math.PI * R;
+  const frac = dayNum ? Math.min(1, dayNum / cycleLen) : 0;
+  const late = !!(pred && pred.overdue > 0 && !running);
+  document.getElementById('cycle-ring').innerHTML =
+    `<svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="${R}" fill="none" stroke-width="10"/>`
+    + `<circle class="ring-bar${late ? ' ring-late' : ''}" cx="60" cy="60" r="${R}" fill="none" stroke-width="10"`
+    + ` stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}"/></svg>`
+    + `<div class="ring-label"><span class="ring-day">${dayNum || '–'}</span>`
+    + `<span class="ring-of">${dayNum ? `Tag von ~${cycleLen}` : 'kein Zyklus'}</span></div>`;
+
+  // The main button follows the situation instead of offering both.
+  const primary = document.getElementById('hero-primary');
+  primary.dataset.action = running ? 'quick-end' : 'quick-start';
+  primary.innerHTML = running
+    ? `${ico('check')}<span>Periode endet heute</span>`
+    : `${ico('drop')}<span>Periode beginnt heute</span>`;
+
   // var() rather than literals: this is an inline style, so a dark-mode CSS
   // rule could not override it — the badge would stay a pastel blob with dark
   // text while everything around it went navy.
@@ -1597,10 +1921,9 @@ function renderHome() {
   const tok = phaseToken[phase.color] || phaseToken['phase-unknown'];
   // Clear badge when period is active — warning is no longer needed
   if (phase.phase === 'period') navigator.clearAppBadge?.().catch(() => {});
-  document.getElementById('home-phase-badge').innerHTML =
-    `<span style="display:inline-flex;align-items:center;gap:10px;background:var(--pill-${tok}-bg);color:var(--pill-${tok}-ink);border-radius:50px;padding:8px 18px;font-weight:600;font-size:.9rem">
-      ${phase.label} <span style="font-weight:400;font-size:.8rem;opacity:.75">· Tag ${dayNum} im Zyklus</span>
-    </span>`;
+  document.getElementById('home-phase-badge').innerHTML = last
+    ? `<span style="display:inline-flex;align-items:center;gap:8px;background:var(--pill-${tok}-bg);color:var(--pill-${tok}-ink);border-radius:50px;padding:6px 14px;font-weight:600;font-size:.82rem">${phase.label}</span>`
+    : '';
 
   // Timeline legend
   const pal = readPhaseColors();
@@ -1620,20 +1943,23 @@ function renderHome() {
       </span>`
     ).join('') + `</div>`;
 
-  // Draw the canvases — wait until visible (fixes half-width on tab switch)
+  // Draw the canvases — wait until visible (fixes half-width on tab switch).
+  // The hormone chart sits in a collapsed <details> by default; its observer
+  // simply fires once it is opened.
   scheduleDrawHormones();
   scheduleDrawTimeline();
 
-  // Next events pills — sorted by proximity
+  // Upcoming events — one row each, sorted by proximity
   let evHtml = '';
-  const pred = CycleCore.predictNextCycle(cycles, t);
   if (np && pred) {
     // Every event of the cycle hangs off the same uncertain start, so each is
     // shown as the range the start's range implies, shifted by its offset.
     // The fertile window comes from the phase entry: it also carries the
     // luteal phase's own variation, so it is wider than the others.
     const events = [];
-    const pill = (cls, text) => `<span class="event-pill ${cls}">${text}</span>`;
+    const row = (cls, title, when, dates) =>
+      `<div class="event-pill ${cls}"><span class="ev-dot"></span> <span class="ev-title">${title}</span> `
+      + `<span class="ev-when">${when}${dates ? ` <span class="ev-dates">${dates}</span>` : ''}</span></div>`;
     const span = (lo, hi) => ({
       d: diffDays(t, lo),
       when: CycleCore.inDaysSpan(diffDays(t, lo), diffDays(t, hi)),
@@ -1642,48 +1968,48 @@ function renderHome() {
     const shifted = off => span(
       dateStr(addDays(pred.lo, off)) < t ? t : dateStr(addDays(pred.lo, off)),
       dateStr(addDays(pred.hi, off)));
+    const note = text => ({ d: Infinity, html: `<div class="ev-note">${text}</div>` });
 
-    if (pred.overdue > 0) {
+    if (running) {
+      const end = dateStr(addDays(last.start, calcAvgPeriod(cycles) - 1));
+      events.push({d: 0, html: row('period', 'Periode', `läuft · Tag ${dayNum}`,
+        `voraussichtlich bis ${fmtDate(end)}`)});
+    } else if (pred.overdue > 0) {
       const n = pred.overdue;
-      events.push({d: -1, html: pill('period',
-        `🩸 Periode seit ${n} ${n === 1 ? 'Tag' : 'Tagen'} überfällig (erwartet ${fmtDate(pred.start)})`)});
-      events.push({d: Infinity, html:
-        `<span style="font-size:.72rem;color:var(--text-light);padding:2px 4px">`
-        + (pred.beyondRange
-            ? 'Später als 80 % der Prognosen — schon begonnen? Dann unter „Zyklen“ eintragen.'
-            : `Liegt noch in der üblichen Spanne bis ${fmtDate(pred.hi)}.`)
-        + `</span>`});
+      events.push({d: -1, html: row('period', 'Periode', `seit ${n} ${n === 1 ? 'Tag' : 'Tagen'} überfällig`,
+        `erwartet ${fmtDate(pred.start)}`)});
+      events.push(note(pred.beyondRange
+        ? 'Später als 80 % der Prognosen — schon begonnen? Dann oben eintragen.'
+        : `Liegt noch in der üblichen Spanne bis ${fmtDate(pred.hi)}.`));
     } else {
       const per = span(pred.lo, pred.hi);
-      events.push({d: per.d, html: pill('period', `🩸 Periode ${per.when} (${per.dates})`)});
+      events.push({d: per.d, html: row('period', 'Periode', per.when, per.dates)});
 
-      const pms = shifted(-PMS_DAYS);
-      if (dateStr(addDays(pred.hi, -PMS_DAYS)) >= t)
-        events.push({d: pms.d, html: pill('pms', `🌕 PMS ${pms.when} (${pms.dates})`)});
-
-      const hell = shifted(-CycleCore.HELL_DAY_OFFSET);
-      if (dateStr(addDays(pred.hi, -CycleCore.HELL_DAY_OFFSET)) >= t)
-        events.push({d: hell.d, html: pill('hell', `😤 Hell Day ${hell.when} (${hell.dates})`)});
-
+      if (dateStr(addDays(pred.hi, -PMS_DAYS)) >= t) {
+        const pms = shifted(-PMS_DAYS);
+        events.push({d: pms.d, html: row('pms', 'PMS', pms.when, pms.dates)});
+      }
+      if (dateStr(addDays(pred.hi, -CycleCore.HELL_DAY_OFFSET)) >= t) {
+        const hell = shifted(-CycleCore.HELL_DAY_OFFSET);
+        events.push({d: hell.d, html: row('hell', 'Hell Day', hell.when, hell.dates)});
+      }
       if (np.fertileEnd && np.fertileEnd >= t) {
         const fw = span(np.fertileStart < t ? t : np.fertileStart, np.fertileEnd);
-        events.push({d: fw.d, html: pill('ovulation', `🌿 Fruchtbare Phase ${fw.when} (${fw.dates})`)});
+        events.push({d: fw.d, html: row('ovulation', 'Fruchtbare Phase', fw.when, fw.dates)});
       }
 
-      // Say once where the ranges come from, rather than on every pill.
+      // Say once where the ranges come from, rather than on every row.
       const basis = pred.n >= 3
         ? `deinen letzten ${pred.n} Zyklen`
         : (pred.n ? `erst ${pred.n} ${pred.n === 1 ? 'Zyklus' : 'Zyklen'} plus Durchschnittswerten`
                   : 'Durchschnittswerten — trag mehr Zyklen ein');
-      events.push({d: Infinity, html:
-        `<span style="font-size:.72rem;color:var(--text-light);padding:2px 4px">`
-        + `Spannen: 80-%-Prognose aus ${basis}. Fruchtbare Phase: Kalenderschätzung, keine Verhütungsmethode.</span>`});
+      events.push(note(`Spannen: 80-%-Prognose aus ${basis}. Fruchtbare Phase: Kalenderschätzung, keine Verhütungsmethode.`));
     }
 
     events.sort((a, b) => a.d - b.d);
     evHtml = events.map(e => e.html).join('');
   }
-  if (!evHtml) evHtml = '<span style="color:var(--text-light);font-size:.85rem">Keine Daten – bitte unter „Zyklen" einen Eintrag hinzufügen</span>';
+  if (!evHtml) evHtml = '<div class="ev-note">Noch keine Prognose — trag oben deine letzte Periode ein.</div>';
   document.getElementById('next-events').innerHTML = evHtml;
 }
 
@@ -1782,21 +2108,31 @@ function renderCyclesList() {
     document.getElementById('cycle-list').innerHTML = '<p style="color:var(--text-light);font-size:.85rem;text-align:center;padding:20px 0">Noch keine Zyklen eingetragen</p>';
     return;
   }
-  let html = '';
+  // Newest first, grouped by year, so the year is said once instead of twice
+  // per row. The whole row edits; deleting lives in the edit dialog.
+  let html = '', year = null;
   for (let i=0;i<cycles.length;i++) {
     const c = cycles[i];
-    const dur = c.end ? diffDays(c.start, c.end)+1 : '?';
+    const y = c.start.slice(0, 4);
+    if (y !== year) { html += `<div class="year-head">${y}</div>`; year = y; }
+    const noYear = ds => ds.replace(/\s\d{4}$/, '');
+    const dates = c.end
+      ? (c.end.slice(0, 4) === y ? noYear(fmtRange(c.start, c.end)) : fmtRange(c.start, c.end))
+      : `${noYear(fmtDate(c.start))} → offen`;
+    const dur = c.end ? diffDays(c.start, c.end)+1 : null;
     // cycles is newest-first; the previous cycle (older) is at i+1
     const prev = i+1 < cycles.length ? cycles[i+1] : null;
-    const cycleLen = prev ? diffDays(prev.start, c.start) : '–';
+    const cycleLen = prev ? diffDays(prev.start, c.start) : null;
+    const chips = [
+      dur ? `<span class="chip">${dur} ${dur === 1 ? 'Tag' : 'Tage'} Periode</span>` : `<span class="chip open">läuft</span>`,
+      cycleLen != null ? `<span class="chip">Zyklus ${cycleLen} Tage</span>` : '',
+    ].join('');
     html += `<div class="cycle-row">
-      <div class="dot"></div>
       <div class="info">
-        <div class="dates">${fmtDate(c.start)} → ${c.end ? fmtDate(c.end) : 'offen'}</div>
-        <div class="meta">Dauer: ${dur} Tage · Zykluslänge: ${cycleLen === '–' ? '–' : cycleLen+' Tage'}</div>
+        <div class="dates">${dates}</div>
+        <div class="meta">${chips}</div>
       </div>
-      <button class="icon-btn" title="Bearbeiten" data-edit-id="${c.id}">✏️</button>
-      <button class="icon-btn del" title="Löschen" data-delete-id="${c.id}">🗑️</button>
+      <button class="icon-btn" title="Bearbeiten" aria-label="Eintrag vom ${fmtDate(c.start)} bearbeiten" data-edit-id="${c.id}">${ico('edit')}</button>
     </div>`;
   }
   document.getElementById('cycle-list').innerHTML = html;
@@ -1813,10 +2149,17 @@ function renderCyclesList() {
 // ══════════════════════════════════════════════════════════
 // POPULATION (reference curves) comes from cycle-core.js, with its sources.
 
+// One decimal, German style: 28,5 rather than 28.5.
+function de1(v) { return (Math.round(v * 10) / 10).toLocaleString('de-DE'); }
+
 function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean, refStd, lastValue) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
+  // Measure the layout width, not the pixel width a previous draw pinned —
+  // a draw while the tab was hidden (resize, theme switch) fell back to 340px
+  // and every later draw measured that back.
+  canvas.style.width = '100%';
   const W = canvas.offsetWidth || canvas.parentElement.offsetWidth || 340;
   const H = 160;
   canvas.width = W * dpr;
@@ -1962,13 +2305,100 @@ function drawNormalChart(canvasId, infoId, values, color1, color2, unit, refMean
   ctx.textAlign = 'center';
   const labelStep = Math.max(1, Math.ceil((xMax-xMin)/8));
   for (let v=Math.ceil(xMin/labelStep)*labelStep; v<=xMax; v+=labelStep) {
-    ctx.fillText(v+unit, toX(v), H-6);
+    ctx.fillText(String(v), toX(v), H-6);
   }
 
   if (infoId) {
     document.getElementById(infoId).textContent =
-      `Dein Ø: ${Math.round(userMean*10)/10}${unit} (σ ${Math.round(userStd*10)/10}${unit}, n=${values.length}) · Bevölkerung: ${refMean}${unit} (σ ${refStd}${unit})`;
+      `Dein Ø: ${de1(userMean)} Tage (σ ${de1(userStd)}, n = ${values.length}) · Bevölkerung: ${de1(refMean)} Tage (σ ${de1(refStd)})`;
   }
+}
+
+// ══════════════════════════════════════════════════════════
+// HISTORY CHART
+// One bar per cycle (the gap to the next recorded start), oldest left, the
+// last 12 shown. Gaps that cycleGaps() treats as a skipped month are drawn
+// faded and left out of the average. Behind the bars: the model mean and the
+// 80 % range for the next cycle, so "is my last cycle unusual?" can be read
+// straight off the chart.
+// ══════════════════════════════════════════════════════════
+function drawHistoryChart(cycles) {
+  const canvas = document.getElementById('chart-history');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  // Measure the layout width, not the pixel width a previous draw pinned —
+  // a draw while the tab was hidden (resize, theme switch) fell back to 340px
+  // and every later draw measured that back.
+  canvas.style.width = '100%';
+  const W = canvas.offsetWidth || canvas.parentElement.offsetWidth || 340;
+  const H = 170;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  const info = document.getElementById('chart-history-info');
+
+  // Pair every gap with whether cycleGaps() kept it. The filter keeps order,
+  // so walking both lists side by side matches them exactly.
+  const kept = cycleGaps(cycles);
+  const bars = [];
+  for (let i = 1, j = 0; i < cycles.length; i++) {
+    const gap = diffDays(cycles[i-1].start, cycles[i].start);
+    const used = j < kept.length && kept[j] === gap;
+    if (used) j++;
+    bars.push({ gap, used, start: cycles[i-1].start });
+  }
+  const shown = bars.slice(-12);
+  const muted = cssVar('--chart-muted'), ink = cssVar('--chart-ink');
+  if (!shown.length) {
+    ctx.fillStyle = muted; ctx.font = '12px DM Sans, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Ab zwei eingetragenen Perioden erscheint hier jeder Zyklus', W / 2, H / 2);
+    info.textContent = '';
+    return;
+  }
+
+  const model = CycleCore.cycleModel(cycles);
+  const half  = CycleCore.startHalfWidth(model, 1);
+  const vals  = shown.map(b => Math.min(b.gap, 70));
+  const lo = Math.max(0, Math.floor(Math.min(...vals, model.mean - half) - 4));
+  const hi = Math.ceil(Math.max(...vals, model.mean + half) + 3);
+  const pad = { top: 18, bottom: 26, left: 8, right: 8 };
+  const ch = H - pad.top - pad.bottom, cw = W - pad.left - pad.right;
+  const y = v => pad.top + ch - ((v - lo) / (hi - lo)) * ch;
+
+  // 80 % band and mean
+  ctx.fillStyle = cssVar('--chart-ref-fill');
+  ctx.fillRect(pad.left, y(model.mean + half), cw, y(model.mean - half) - y(model.mean + half));
+  ctx.strokeStyle = cssVar('--chart-ref-stroke'); ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(pad.left, y(model.mean)); ctx.lineTo(W - pad.right, y(model.mean)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const slot = cw / shown.length, bw = Math.min(34, slot * 0.62);
+  const c1 = curve1();
+  ctx.textAlign = 'center';
+  shown.forEach((b, i) => {
+    const x = pad.left + slot * i + (slot - bw) / 2, top = y(Math.min(b.gap, 70));
+    ctx.fillStyle = b.used ? c1 : muted;
+    ctx.globalAlpha = b.used ? 0.9 : 0.45;
+    const r = Math.min(6, bw / 2);
+    ctx.beginPath();
+    ctx.moveTo(x, y(lo)); ctx.lineTo(x, top + r);
+    ctx.quadraticCurveTo(x, top, x + r, top); ctx.lineTo(x + bw - r, top);
+    ctx.quadraticCurveTo(x + bw, top, x + bw, top + r); ctx.lineTo(x + bw, y(lo));
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ink; ctx.font = '600 11px DM Sans, sans-serif';
+    ctx.fillText(String(b.gap), x + bw / 2, top - 5);
+    ctx.fillStyle = muted; ctx.font = '10px DM Sans, sans-serif';
+    const d = parseDate(b.start);
+    ctx.fillText(`${d.getDate()}.${d.getMonth() + 1}.`, x + bw / 2, H - 8);
+  });
+
+  const r1 = n => n.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+  info.textContent = `Ø ${r1(model.mean)} Tage · nächster Zyklus mit 80 % zwischen `
+    + `${Math.round(model.mean - half)} und ${Math.round(model.mean + half)} Tagen`
+    + (bars.some(b => !b.used) ? ' · blass: als ausgelassener Monat gewertet' : '');
 }
 
 function renderStats() {
@@ -1976,6 +2406,7 @@ function renderStats() {
   if (cycles.length < 1) {
     document.getElementById('stats-grid').innerHTML = '<p style="color:var(--text-light);font-size:.85rem;grid-column:1/-1;text-align:center;padding:20px 0">Noch nicht genug Daten</p>';
     requestAnimationFrame(() => {
+      drawHistoryChart([]);
       drawNormalChart('chart-cycle',    'chart-cycle-info',    [], curve1(),curve2(),'T', POPULATION.cycle.mean,    POPULATION.cycle.std);
       drawNormalChart('chart-duration', 'chart-duration-info', [], curve1(),curve2(),'T', POPULATION.duration.mean, POPULATION.duration.std);
     });
@@ -1995,11 +2426,14 @@ function renderStats() {
   const avgDur = durations.length ? calcAvgPeriod(cycles) : '–';
 
   const { sd, n: nGaps } = CycleCore.calcCycleSpread(cycles);
+  // Numbers with their unit written out: "29T" read like a code, not a length.
+  const days = (v, prefix = '') => v === '–' ? '–'
+    : `${prefix}${v.toLocaleString('de-DE')}<span class="s-unit">${v === 1 ? 'Tag' : 'Tage'}</span>`;
   const grid = [
     {val: cycles.length,                    label:'Eingetragene Zyklen'},
-    {val: avgLen!=='–' ? avgLen+'T' : '–',  label:'Ø Zykluslänge'},
-    {val: avgDur!=='–' ? avgDur+'T' : '–',  label:'Ø Periodendauer'},
-    {val: nGaps >= 2 ? '±' + (Math.round(sd*10)/10) + 'T' : '–',
+    {val: days(avgLen),                     label:'Ø Zykluslänge'},
+    {val: days(avgDur),                     label:'Ø Periodendauer'},
+    {val: nGaps >= 2 ? days(Math.round(sd*10)/10, '± ') : '–',
      label: 'Schwankung Zyklus'},
   ];
 
@@ -2021,6 +2455,7 @@ function renderStats() {
   `).join('') + note;
 
   requestAnimationFrame(() => {
+    drawHistoryChart(cycles);
     drawNormalChart('chart-cycle',    'chart-cycle-info',    lengths,   curve1(),curve2(),'T', POPULATION.cycle.mean,    POPULATION.cycle.std,    lastCycleLen);
     drawNormalChart('chart-duration', 'chart-duration-info', durations, curve1(),curve2(),'T', POPULATION.duration.mean, POPULATION.duration.std, lastDuration);
   });
@@ -2073,13 +2508,33 @@ function avgPeriodLength() {
   return calcAvgPeriod(sortedCycles());
 }
 
+// endTouched: the end date was typed by hand, so a new start must not
+// overwrite it. Otherwise the suggestion follows the start.
+let endTouched = false;
 function autoFillEndDate() {
-  // Only auto-fill when adding (not editing) and end is still empty
-  if (editingId) return;
+  // Only auto-fill when adding (not editing) and the user did not set an end
+  if (editingId || endTouched) return;
   const start = document.getElementById('m-start').value;
   const endField = document.getElementById('m-end');
-  if (!start || endField.value) return;
-  endField.value = dateStr(addDays(start, avgPeriodLength() - 1));
+  if (!start) return;
+  const end = dateStr(addDays(start, avgPeriodLength() - 1));
+  // Never suggest an end in the future: saving would reject it, and a period
+  // that started today has not ended yet.
+  endField.value = end <= today() ? end : '';
+}
+
+// Quick choice for the start: 0 = today, 1 = yesterday, …
+function setStartDaysAgo(n) {
+  document.getElementById('m-start').value = dateStr(addDays(today(), -n));
+  autoFillEndDate();
+  markStartChip();
+}
+function markStartChip() {
+  const v = document.getElementById('m-start').value;
+  document.querySelectorAll('#m-chips .chip-btn').forEach(b => {
+    const n = Number(b.dataset.action.slice(6));
+    b.classList.toggle('active', v === dateStr(addDays(today(), -n)));
+  });
 }
 
 // startDate: optional preset, used when a calendar day is activated.
@@ -2087,9 +2542,14 @@ function openAddModal(startDate) {
   editingId = null;
   const t = today();
   const start = (startDate && startDate <= t) ? startDate : t;
+  endTouched = false;
   document.getElementById('modal-title').textContent = 'Zyklus eintragen';
   document.getElementById('m-start').value = start;
   document.getElementById('m-end').value = '';
+  document.getElementById('m-delete').hidden = true;
+  document.getElementById('m-chips').hidden = false;
+  autoFillEndDate();
+  markStartChip();
   openOverlay('modal-overlay');
   document.getElementById('m-start').focus();
 }
@@ -2100,6 +2560,8 @@ function openEditModal(id) {
   document.getElementById('modal-title').textContent = 'Zyklus bearbeiten';
   document.getElementById('m-start').value = c.start;
   document.getElementById('m-end').value = c.end||'';
+  document.getElementById('m-delete').hidden = false;
+  document.getElementById('m-chips').hidden = true;
   openOverlay('modal-overlay');
   document.getElementById('m-start').focus();
 }
@@ -2124,6 +2586,8 @@ function saveModal() {
   const duplicate = state.cycles.find(c => c.start === start && c.id !== editingId);
   if (duplicate) { showToast('⚠️ Es gibt bereits einen Eintrag mit diesem Startdatum'); return; }
 
+  const wasEditing = !!editingId;
+  const undo = snapshot();
   if (editingId) {
     const idx = state.cycles.findIndex(c=>c.id===editingId);
     if (idx>=0) state.cycles[idx] = {...state.cycles[idx], start, end};
@@ -2133,7 +2597,43 @@ function saveModal() {
   save();
   closeModal();
   renderAll();
-  showToast(editingId ? '✅ Zyklus aktualisiert' : '✅ Zyklus eingetragen');
+  offerUndo(wasEditing ? 'Zyklus aktualisiert' : 'Zyklus eingetragen', undo);
+}
+
+// Delete from the edit dialog. No second "are you sure": the undo bar is the
+// safety net, and it costs nothing when the delete was intended.
+function deleteEditing() {
+  const id = editingId;
+  closeModal();
+  if (id) deleteCycle(id);
+}
+
+// ══════════════════════════════════════════════════════════
+// UNDO
+// snapshot() captures the cycles before a change; offerUndo(msg, snap) shows
+// the bar for a few seconds, and tapping it puts the snapshot back.
+// ══════════════════════════════════════════════════════════
+let _undo = null, _undoTimer = null;
+function snapshot() { return JSON.stringify(state.cycles); }
+function offerUndo(msg, snap) {
+  _undo = snap;
+  const bar = document.getElementById('undo-bar');
+  bar.innerHTML = `${msg}<strong>Rückgängig</strong>`;
+  bar.classList.add('show');
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(hideUndo, 6000);
+}
+function hideUndo() {
+  _undo = null;
+  document.getElementById('undo-bar').classList.remove('show');
+}
+function undoLast() {
+  if (_undo == null) return;
+  state.cycles = JSON.parse(_undo);
+  hideUndo();
+  save();
+  renderAll();
+  showToast('Rückgängig gemacht');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2172,17 +2672,11 @@ function confirmDelete() {
 function deleteCycle(id) {
   const c = state.cycles.find(x => x.id === id);
   if (!c) return;
-  askConfirm({
-    title: 'Eintrag löschen?',
-    message: `Periode vom ${fmtDate(c.start)}${c.end ? ' bis ' + fmtDate(c.end) : ''} löschen?`,
-    okLabel: 'Löschen',
-    onConfirm: () => {
-      state.cycles = state.cycles.filter(x => x.id !== id);
-      save();
-      renderAll();
-      showToast('🗑️ Eintrag gelöscht');
-    },
-  });
+  const undo = snapshot();
+  state.cycles = state.cycles.filter(x => x.id !== id);
+  save();
+  renderAll();
+  offerUndo(`Periode vom ${fmtDate(c.start)} gelöscht`, undo);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2196,19 +2690,21 @@ function quickStart() {
   const t = today();
   const existing = state.cycles.find(c=>c.start===t);
   if (existing) { showToast('⚠️ Heute bereits eingetragen'); return; }
+  const undo = snapshot();
   state.cycles.push({id:'c'+Date.now(), start:t, end:null});
   save(); renderAll();
-  showToast('🔴 Periode gestartet für heute');
+  offerUndo('Periode ab heute eingetragen', undo);
 }
 function quickEnd() {
   const t = today();
   // find open cycle
   const openRef = sortedCycles().reverse().find(c=>!c.end && c.start<=t);
   if (openRef) {
+    const undo = snapshot();
     const idx = state.cycles.findIndex(c=>c.id===openRef.id);
     if (idx>=0) state.cycles[idx].end = t;
     save(); renderAll();
-    showToast('✅ Periode beendet');
+    offerUndo('Periode beendet', undo);
   } else {
     showToast('⚠️ Keine offene Periode gefunden');
   }
@@ -2491,7 +2987,8 @@ function renderSettings() {
   const toggle = document.getElementById('notif-toggle-btn');
   if (toggle) {
     toggle.style.display = granted ? '' : 'none';
-    toggle.textContent = on ? '🔕 Benachrichtigungen ausschalten' : '🔔 Benachrichtigungen einschalten';
+    toggle.innerHTML = on ? `${ico('bell-off')}<span>Benachrichtigungen ausschalten</span>`
+                          : `${ico('bell')}<span>Benachrichtigungen einschalten</span>`;
   }
 
   const el = document.getElementById('notif-status');
@@ -2516,17 +3013,25 @@ function renderSettings() {
   }
 }
 
-function saveSettings() {
+// Saved on every change (typing, or the −/+ buttons). `quiet` skips the toast
+// for the stepper, where the number itself is the confirmation.
+function saveSettings(quiet) {
   const inp = document.getElementById('settings-warn-days');
   const n = parseInt(inp?.value, 10);
-  if (isNaN(n) || n < 1 || n > 14) { showToast('⚠️ Bitte eine Zahl zwischen 1 und 14 eingeben'); return; }
+  if (isNaN(n) || n < 1 || n > 14) { showToast('⚠️ Bitte eine Zahl zwischen 1 und 14 eingeben'); renderSettings(); return; }
+  if (n === state.settings.warnDays) { renderSettings(); return; }
   state.settings.warnDays = n;
   // A changed lead time means the current period may warn again
   state.settings.lastNotifiedFor = null;
   save();
   checkDueNotification();
   renderSettings();
-  showToast(`✅ Einstellung gespeichert – Warnung ${n} ${n === 1 ? 'Tag' : 'Tage'} vor Periode`);
+  if (quiet !== true) showToast(`✅ Gespeichert – Warnung ${n} ${n === 1 ? 'Tag' : 'Tage'} vor Periode`);
+}
+function stepWarnDays(delta) {
+  const inp = document.getElementById('settings-warn-days');
+  inp.value = Math.min(14, Math.max(1, (parseInt(inp.value, 10) || 3) + delta));
+  saveSettings(true);
 }
 
 function requestNotificationPermission() {
@@ -2622,7 +3127,14 @@ const ACTIONS = {
   'add-cycle':            openAddModal,
   'month-prev':           () => changeMonth(-1),
   'month-next':           () => changeMonth(1),
-  'save-settings':        saveSettings,
+  'month-today':          () => { calendarMonth = new Date(); renderCalendar(); },
+  'warn-dec':             () => stepWarnDays(-1),
+  'warn-inc':             () => stepWarnDays(1),
+  'start-0':              () => setStartDaysAgo(0),
+  'start-1':              () => setStartDaysAgo(1),
+  'start-2':              () => setStartDaysAgo(2),
+  'delete-editing':       deleteEditing,
+  'undo':                 undoLast,
   'enable-notifications': requestNotificationPermission,
   'toggle-notifications': toggleNotifications,
   'export':               exportData,
@@ -2654,7 +3166,9 @@ document.addEventListener('click', e => {
 
 document.addEventListener('change', e => {
   if (e.target.id === 'import-file-input') importData(e);
-  if (e.target.id === 'm-start') autoFillEndDate();
+  if (e.target.id === 'm-start') { autoFillEndDate(); markStartChip(); }
+  if (e.target.id === 'm-end') endTouched = true;
+  if (e.target.id === 'settings-warn-days') saveSettings();
   // Applied on change, not on "Speichern": a colour scheme you cannot see
   // until you press save is a worse control than one that just switches.
   if (e.target.id === 'settings-theme') setThemePref(e.target.value);
@@ -2679,6 +3193,31 @@ document.getElementById('cal-grid').addEventListener('keydown', e => {
   if (!day) return;
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAddModal(day.dataset.date); }
 });
+
+// Swipe left/right on the calendar to change the month.
+(function () {
+  const grid = document.getElementById('cal-grid');
+  let x0 = null, y0 = null;
+  grid.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  grid.addEventListener('touchend', e => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 50 && Math.abs(dy) < 40) changeMonth(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
+
+// The hormone chart is illustration, not data, so it starts folded away. The
+// choice is a device preference, like the theme — outside `state`.
+(function () {
+  const KEY = 'crimson-tide-tracker-hormones';
+  const d = document.getElementById('hormone-details');
+  try { d.open = localStorage.getItem(KEY) === 'open'; } catch (e) {}
+  d.addEventListener('toggle', () => {
+    try { localStorage.setItem(KEY, d.open ? 'open' : 'closed'); } catch (e) {}
+    if (d.open) scheduleDrawHormones();
+  });
+})();
 
 // ── Modals ─────────────────────────────────────────────────
 // Backdrop click closes; Escape closes from anywhere, not just when the focus
@@ -2733,7 +3272,11 @@ renderAll();
 let _resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(_resizeTimer);
-  _resizeTimer = setTimeout(() => { renderStats(); drawHormones(); drawTimeline(); }, 150);
+  // Only what is on screen: a hidden canvas has no width to measure.
+  _resizeTimer = setTimeout(() => {
+    if (activeTab === 'stats') renderStats();
+    if (activeTab === 'home') { scheduleDrawHormones(); scheduleDrawTimeline(); }
+  }, 150);
 });
 
 // Follow the system only while nothing else was chosen. With 'Hell' or
