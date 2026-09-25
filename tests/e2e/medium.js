@@ -69,7 +69,7 @@ const SEED = {
       state.cycles[0].end = '2026-09-14'; renderCyclesList();
       return document.querySelector('.cycle-row .dates').textContent;
     });
-    check('abgeschlossene Periode zeigt das Datum', /→\s*14\./.test(closed), closed);
+    check('abgeschlossene Periode zeigt die Spanne bis zum Ende', /–14\./.test(closed), closed);
     await c.close();
   }
 
@@ -245,9 +245,10 @@ const SEED = {
     check('jede Pille nennt eine Tagesspanne',
       r.pills.length > 0 && r.pills.every(t => /in \d+–\d+ Tagen|heute bis in \d+ Tag/.test(t)),
       JSON.stringify(r.pills));
+    const dates = await p.evaluate(() =>
+      [...document.querySelectorAll('#next-events .ev-dates')].map(e => e.textContent.trim()));
     check('Datumsangaben sind ebenfalls Spannen',
-      r.pills.filter(t => /\(/.test(t)).every(t => /\(\d{2}\.[–\s]/.test(t)),
-      JSON.stringify(r.pills));
+      dates.length > 0 && dates.every(t => /^\d{2}\.[–\s]/.test(t)), JSON.stringify(dates));
     await c.close();
   }
 
@@ -592,6 +593,106 @@ const SEED = {
       check('Theme steht nicht im Export', !/theme/i.test(exported), exported.slice(0, 80));
       await c.close();
     }
+  }
+
+  // ══ Design 1.11: hero, bottom bar, undo, dialog, settings ══
+  console.log('\n=== Design ===');
+  {
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin', viewport: { width: 390, height: 844 } },
+      null, '2026-09-12T10:00:00Z');
+    const r = await p.evaluate(() => {
+      const bar = document.querySelector('.tabs').getBoundingClientRect();
+      const btn = document.getElementById('hero-primary').getBoundingClientRect();
+      return {
+        barAtBottom: Math.round(bar.bottom) === innerHeight,
+        allTabsVisible: [...document.querySelectorAll('.tab')].every(t => {
+          const b = t.getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth;
+        }),
+        heroButtonAboveFold: btn.bottom < bar.top,
+        big: document.getElementById('hero-big').textContent,
+        action: document.getElementById('hero-primary').dataset.action,
+      };
+    });
+    check('Tab-Leiste am Handy unten, alle fuenf sichtbar', r.barAtBottom && r.allTabsVisible, JSON.stringify(r));
+    check('Hauptknopf ohne Scrollen erreichbar', r.heroButtonAboveFold, JSON.stringify(r));
+    check('Hero nennt die naechste Periode als Spanne', /^In \d+–\d+ Tagen$/.test(r.big), r.big);
+    check('ohne laufende Periode heisst der Knopf "beginnt heute"', r.action === 'quick-start', r.action);
+
+    const flow = await p.evaluate(async () => {
+      document.getElementById('hero-primary').click();
+      const afterStart = document.getElementById('hero-primary').dataset.action;
+      const undoShown = document.getElementById('undo-bar').classList.contains('show');
+      document.getElementById('undo-bar').click();
+      const undone = !state.cycles.some(x => x.start === today());
+      return { afterStart, undoShown, undone };
+    });
+    check('waehrend der Periode wird daraus "endet heute"', flow.afterStart === 'quick-end', JSON.stringify(flow));
+    check('Rueckgaengig macht den Schnelleintrag ungeschehen', flow.undoShown && flow.undone, JSON.stringify(flow));
+
+    const del = await p.evaluate(() => {
+      document.querySelector('[data-tab="cycles"]').click();
+      const rowDelete = document.querySelectorAll('#cycle-list [data-delete-id]').length;
+      const n = state.cycles.length;
+      document.querySelector('[data-edit-id]').click();
+      const visible = !document.getElementById('m-delete').hidden;
+      document.getElementById('m-delete').click();
+      const deleted = state.cycles.length === n - 1;
+      document.getElementById('undo-bar').click();
+      return { rowDelete, visible, deleted, restored: state.cycles.length === n };
+    });
+    check('kein Loeschknopf mehr in den Listenzeilen', del.rowDelete === 0, JSON.stringify(del));
+    check('Loeschen im Bearbeiten-Dialog, mit Rueckgaengig', del.visible && del.deleted && del.restored, JSON.stringify(del));
+
+    const dlg = await p.evaluate(() => {
+      document.querySelector('[data-action="add-cycle"]').click();
+      const chipsShown = !document.getElementById('m-chips').hidden;
+      const deleteHidden = document.getElementById('m-delete').hidden;
+      document.querySelector('[data-action="start-1"]').click();
+      const start = document.getElementById('m-start').value;
+      const end = document.getElementById('m-end').value;
+      document.querySelector('[data-action="close-modal"]').click();
+      return { chipsShown, deleteHidden, start, end };
+    });
+    check('Schnellwahl "Gestern" setzt den Beginn', dlg.chipsShown && dlg.deleteHidden && dlg.start === '2026-09-11', JSON.stringify(dlg));
+    check('vorgeschlagenes Ende liegt nie in der Zukunft', dlg.end === '' || dlg.end <= '2026-09-12', JSON.stringify(dlg));
+
+    const warn = await p.evaluate(() => {
+      document.querySelector('[data-tab="settings"]').click();
+      document.querySelector('[data-action="warn-inc"]').click();
+      document.querySelector('[data-action="warn-inc"]').click();
+      return JSON.parse(localStorage.getItem('crimson-tide-tracker')).settings.warnDays;
+    });
+    check('Vorwarntage speichern ohne Speichern-Knopf', warn === 5, 'warnDays=' + warn);
+    await c.close();
+  }
+
+  {
+    // Running period: the main button offers to end it.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' },
+      { cycles: [{ id: 'a', start: '2026-08-14', end: '2026-08-18' }, { id: 'o', start: '2026-09-10', end: null }],
+        settings: { warnDays: 3 } }, '2026-09-12T10:00:00Z');
+    const r = await p.evaluate(() => ({
+      action: document.getElementById('hero-primary').dataset.action,
+      big: document.getElementById('hero-big').textContent,
+    }));
+    check('laufende Periode: Knopf "endet heute", Hero nennt den Tag',
+      r.action === 'quick-end' && /Tag 3/.test(r.big), JSON.stringify(r));
+    await c.close();
+  }
+
+  {
+    // Stats: units written out, history chart drawn.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, null, '2026-09-12T10:00:00Z');
+    const r = await p.evaluate(() => {
+      document.querySelector('[data-tab="stats"]').click();
+      return new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => res({
+        vals: [...document.querySelectorAll('.stat-box .s-val')].map(e => e.textContent),
+        info: document.getElementById('chart-history-info').textContent,
+      }))));
+    });
+    check('Statistik schreibt "Tage" aus', r.vals.some(v => /^\d+ ?Tage$/.test(v)) && !r.vals.some(v => /\dT$/.test(v)), JSON.stringify(r.vals));
+    check('Verlaufsdiagramm nennt Mittel und 80-%-Bereich', /Ø .*80 %/.test(r.info), r.info);
+    await c.close();
   }
 
   // ══ Regression ══
