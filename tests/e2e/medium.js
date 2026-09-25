@@ -38,9 +38,16 @@ const SEED = {
     console.log((ok ? '  PASS  ' : '  FAIL  ') + n + (d && !ok ? '\n           ' + d : ''));
     if (!ok) fails++;
   };
-  const seeded = async (ctxOpts, storage) => {
+  // `at` freezes the page clock (ISO instant). Anything that depends on
+  // "today" has to set it: these tests used to assume the day they were
+  // written and started failing two weeks later.
+  const seeded = async (ctxOpts, storage, at) => {
     const c = await browser.newContext(ctxOpts || {});
     const p = await c.newPage();
+    if (at) await p.addInitScript(iso => {
+      const f = new Date(iso).getTime(); const D = Date;
+      Date = class extends D { constructor(...a) { if (!a.length) super(f); else super(...a); } static now() { return f; } };
+    }, at);
     await p.addInitScript(v => localStorage.setItem('crimson-tide-tracker', v),
       JSON.stringify(storage || SEED));
     await p.goto(U);
@@ -113,7 +120,7 @@ const SEED = {
         { id: 'b', start: '2026-07-31', end: '2026-08-04' },
         { id: 'o', start: '2026-09-11', end: null },
       ], settings: { warnDays: 3 },
-    });
+    }, '2026-09-11T10:00:00Z');
     const open = await p.evaluate(() => {
       const cy = sortedCycles(), ac = calcAvgCycle(cy), ap = calcAvgPeriod(cy);
       const ph = buildAllPhases();
@@ -196,68 +203,98 @@ const SEED = {
     await c.close();
   }
 
-  // ══ Spread instead of a point prediction ══
+  // ══ Ranges instead of a point prediction ══
   console.log('\n=== Prognose mit Spanne ===');
+  const eventsOf = p => p.evaluate(() => ({
+    pills: [...document.querySelectorAll('#next-events .event-pill')].map(e => e.textContent.trim()),
+    text: document.getElementById('next-events').textContent,
+  }));
   {
-    // Regular cycles: nothing to spread, so the old exact wording stands.
-    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' });
-    const pills = await p.evaluate(() =>
-      [...document.querySelectorAll('#next-events .event-pill')].map(e => e.textContent.trim()));
-    check('regelmaessiger Zyklus zeigt weiter einen Tag',
-      pills.some(t => /Periode in \d+ Tagen/.test(t)) && !pills.some(t => /–/.test(t)),
-      JSON.stringify(pills));
-    check('kein Spannen-Hinweis ohne Schwankung',
-      !(await p.evaluate(() => document.getElementById('next-events').textContent.includes('Spanne'))));
+    // Even regular cycles get a range: three equal gaps do not prove a
+    // cycle that never varies.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, null, '2026-09-12T10:00:00Z');
+    const r = await eventsOf(p);
+    check('Periode wird als Tagesspanne gezeigt',
+      r.pills.some(t => /Periode in \d+–\d+ Tagen/.test(t)), JSON.stringify(r.pills));
+    check('Herkunft der Spanne wird einmal erklaert',
+      (r.text.match(/80-%-Prognose/g) || []).length === 1, r.text.slice(-160));
+    check('Hinweis: keine Verhuetungsmethode', /keine Verhütungsmethode/.test(r.text));
+    check('fruchtbare Phase statt eines exakten Eisprungtags',
+      r.pills.some(t => /Fruchtbare Phase/.test(t)) && !r.pills.some(t => /Eisprung/.test(t)),
+      JSON.stringify(r.pills));
     await c.close();
   }
 
   {
-    // Irregular: gaps 24, 36, 24, 35 → sd ≈ 6.65 → ±7 days.
-    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, {
-      cycles: [
-        { id: 'a', start: '2026-06-01', end: '2026-06-05' },
-        { id: 'b', start: '2026-06-25', end: '2026-06-29' },
-        { id: 'c', start: '2026-07-31', end: '2026-08-04' },
-        { id: 'd', start: '2026-08-24', end: '2026-08-28' },
-        { id: 'e', start: '2026-09-28', end: '2026-10-02' },
-      ], settings: { warnDays: 3 },
+    // Irregular: gaps 24, 36, 24, 35 → a wide range.
+    const cycles = [
+      { id: 'a', start: '2026-06-01', end: '2026-06-05' },
+      { id: 'b', start: '2026-06-25', end: '2026-06-29' },
+      { id: 'c', start: '2026-07-31', end: '2026-08-04' },
+      { id: 'd', start: '2026-08-24', end: '2026-08-28' },
+      { id: 'e', start: '2026-09-28', end: '2026-10-02' },
+    ];
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' },
+      { cycles, settings: { warnDays: 3 } }, '2026-10-05T10:00:00Z');
+    const r = await eventsOf(p);
+    const width = await p.evaluate(() => {
+      const x = CycleCore.predictNextCycle(sortedCycles(), today());
+      return diffDays(x.lo, x.hi);
     });
-    const r = await p.evaluate(() => ({
-      spread: CycleCore.calcCycleSpread(sortedCycles()).spread,
-      pills: [...document.querySelectorAll('#next-events .event-pill')].map(e => e.textContent.trim()),
-      note: document.getElementById('next-events').textContent,
-    }));
-    check('unregelmaessiger Zyklus liefert eine Spanne', r.spread === 7, 'spread=' + r.spread);
+    check('unregelmaessiger Zyklus liefert eine breite Spanne', width >= 14, 'width=' + width);
     check('jede Pille nennt eine Tagesspanne',
-      r.pills.length > 0 && r.pills.every(t => /in \d+–\d+ Tagen|heute bis in \d+ Tagen/.test(t)),
+      r.pills.length > 0 && r.pills.every(t => /in \d+–\d+ Tagen|heute bis in \d+ Tag/.test(t)),
       JSON.stringify(r.pills));
     check('Datumsangaben sind ebenfalls Spannen',
       r.pills.filter(t => /\(/.test(t)).every(t => /\(\d{2}\.[–\s]/.test(t)),
       JSON.stringify(r.pills));
-    check('Herkunft der Spanne wird einmal erklaert',
-      /Spanne aus der Schwankung/.test(r.note) && (r.note.match(/Spanne aus/g) || []).length === 1,
-      r.note.slice(-90));
     await c.close();
   }
 
   {
-    // Two gaps are not enough to claim anything about variability.
+    // Few data: the note says the range leans on population values.
     const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, {
       cycles: [
         { id: 'a', start: '2026-07-20', end: '2026-07-24' },
         { id: 'b', start: '2026-08-15', end: '2026-08-19' },
         { id: 'c', start: '2026-09-14', end: '2026-09-18' },
       ], settings: { warnDays: 3 },
+    }, '2026-09-20T10:00:00Z');
+    const r = await eventsOf(p);
+    check('bei zwei Abstaenden wird auf Durchschnittswerte verwiesen',
+      /erst 2 Zyklen plus Durchschnittswerten/.test(r.text), r.text.slice(-160));
+    await c.close();
+  }
+
+  {
+    // Late period: reported as overdue, not replaced by the next month.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, null, '2026-09-28T10:00:00Z');
+    const r = await eventsOf(p);
+    const next = await p.evaluate(() => nextPredictedPeriod().start);
+    check('ueberfaellige Periode wird genannt',
+      r.pills.some(t => /Periode seit 3 Tagen überfällig/.test(t)), JSON.stringify(r.pills));
+    check('Warnung bleibt bei der ueberfaelligen Periode', next === '2026-09-25', next);
+    await c.close();
+  }
+
+  {
+    // Calendar: a far-off projection is marked as a rough guess.
+    const { c, p } = await seeded({ timezoneId: 'Europe/Berlin' }, null, '2026-09-12T10:00:00Z');
+    const r = await p.evaluate(() => {
+      document.querySelector('[data-tab="calendar"]').click();
+      const seen = { near: null, far: 0 };
+      for (let i = 0; i < 4; i++) {
+        const cells = [...document.querySelectorAll('.cal-day.predicted-period')];
+        if (i === 0) seen.near = cells.filter(e => e.classList.contains('uncertain')).length;
+        if (i === 3) seen.far = cells.filter(e => e.classList.contains('uncertain')).length;
+        document.querySelector('[data-action="month-next"]').click();
+      }
+      seen.label = document.querySelector('.cal-day.uncertain')?.getAttribute('aria-label') || '';
+      return seen;
     });
-    const r = await p.evaluate(() => ({
-      n: CycleCore.calcCycleSpread(sortedCycles()).n,
-      sd: CycleCore.calcCycleSpread(sortedCycles()).sd,
-      spread: CycleCore.calcCycleSpread(sortedCycles()).spread,
-      text: document.getElementById('next-events').textContent,
-    }));
-    check('bei zwei Luecken wird trotz Abweichung keine Spanne behauptet',
-      r.n === 2 && r.sd > 0 && r.spread === 0, JSON.stringify(r));
-    check('und kein Spannen-Hinweis erscheint', !/Spanne aus/.test(r.text));
+    check('naechste Periode nicht als grobe Schaetzung markiert', r.near === 0, JSON.stringify(r));
+    check('Monate spaeter gestrichelt markiert', r.far > 0, JSON.stringify(r));
+    check('Unsicherheit steht auch im Screenreader-Label', /± \d+ Tage/.test(r.label), r.label);
     await c.close();
   }
 
